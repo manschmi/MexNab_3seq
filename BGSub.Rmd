@@ -1,0 +1,313 @@
+---
+title: "Background Subtraction"
+author: "Manfred Schmid"
+date: "9 August 2017"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_BGsub_tracks/', dev='pdf')
+```
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+```
+
+
+# Background subtraction for IPs
+
+Using S.pombe normalized values: subtract values from negative IP from all IPs at single position level
+ups:
+--> can result in negatives!!  
+
+need a way to subtract values at each position ...
+here is a little python script that does this:
+```{python subtract_bedgraph.py, eval = FALSE}
+#!/usr/bin/env python
+'''
+
+subtracts values from file2 from file1
+
+Usage: subtract_bedgraph.py file1 file2 --chunk_size --value_col -o/--outFileName
+
+example: python subtract_bedgraph.py ChIP.bedgraph input.bedgraph --chunk_size 1000000 --value_col 5 -o ChIP_minus_input.bedgraph
+
+
+'''
+
+
+__author__ = 'schmidm'
+
+
+import sys
+import argparse
+import numpy as np
+
+
+parser = argparse.ArgumentParser(usage=__doc__)
+
+parser.add_argument('file1')
+parser.add_argument('file2')
+parser.add_argument('--chunk_size', default=1000000, type=int, help="size of the internal array, allows for minor optimization, probably most efficient to use highest end position in bed file (optional, default = 1000000)")
+parser.add_argument('--value_col', default=4, type=int, help="UPS: IMPORTANT, which column to get values for subtraction (default = 4)")
+parser.add_argument('-o', '--outFileName', type=str)
+
+args = parser.parse_args()
+
+
+def print_subtracted(chr, f1_values, f2_values):
+    '''
+    :param chr: name of chr for output
+    :param f1_values: np.array raw values
+    :param f2_values: np.array values to be subtracted
+    :return: nothing
+
+    Prints the values in collapsed form to args.outFileName
+    '''
+    if len(f1_values) > len(f2_values):
+        f2_values = np.append(f2_values, np.zeros(len(f1_values)-len(f2_values)))
+    elif len(f2_values) > len(f1_values):
+        f1_values = np.append(f1_values, np.zeros(len(f2_values)-len(f1_values)))
+
+    out_values = f1_values - f2_values
+
+    with open(args.outFileName, 'a') as outfile:
+        start = 0
+        value = out_values[0]
+        i = 0
+        while i < len(out_values):
+            while i < len(out_values) and out_values[i] == value:
+                i += 1
+            if value != 0:
+                outfile.write(chr + '\t' + str(start) + '\t' + str(i) + '\t' + str(value) + '\n')
+            if i == len(out_values):
+                return
+            start = i
+            value = out_values[i]
+
+
+def read_chr(file):
+    '''
+    :param file: bedgraph file open for read
+    :return: iterator of tuple chr, array of values
+    '''
+    ar = np.zeros(args.chunk_size)
+    line = file.next().split('\t')
+    chr = line[0]
+    while True:
+        try:
+            while line[0] == chr:
+                if int(line[2]) >= len(ar):
+                    ar = np.append(ar, np.zeros(len(ar)))
+                ar[int(line[1]): int(line[2])] += float(line[3])
+                line = file.next().split('\t')
+            yield chr, ar
+            ar = np.zeros(args.chunk_size)
+            chr = line[0]
+        except StopIteration:
+            yield chr, ar
+            return
+
+
+with open(args.outFileName, 'w') as f:
+    f.seek(0)
+    f.truncate()
+
+
+with open(args.file1, 'r') as file1, open(args.file2, 'r') as file2:
+    f2_iter = read_chr(file2)
+    for chr1, f1_values in read_chr(file1):
+        try:
+            chr2, f2_values = f2_iter.next()
+            while chr2 < chr1:
+                chr2, f2_values = f2_iter.next()
+            if chr2 == chr1:
+                print_subtracted(chr1, f1_values, f2_values)
+        except:
+            f2_values = np.zeros(args.chunk_size)
+            print_subtracted(chr1, f1_values, f2_values)
+            exit()
+```
+
+
+apply this to all files
+```{bash, eval=FALSE}
+#!/bin/bash
+
+#This script substracts the values at each positions covered for the native IP (neg0) from the IP tracks
+
+
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+
+## only relevant for IPs obviously
+##rapa=0 samples
+for f in *_ip_0*_KevinRoyAfiltered.bedgraph
+  do
+    echo $f
+    negip_file=$(echo $f | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+  done
+
+
+##rapa=15 samples
+## slightly modified of above, since we only have neg0 without rapa = 0
+for f in *_ip_15*_KevinRoyAfiltered.bedgraph
+  do
+    echo $f
+    negip_file=$(echo $f | sed s/Nab2AA/Mex67AA/g | sed s/ip_15/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+  done
+
+##rapa=70 samples
+for f in *Mex*_ip_70*_KevinRoyAfiltered.bedgraph
+  do
+    echo $f
+    negip_file=$(echo $f | sed s/Nab2AA/Mex67AA/g | sed s/ip_70/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+  done
+```
+
+
+#### get stats for the effect of BGsub
+```{bash, eval = FALSE}
+#### total signals and positions above 0
+echo "file sum_raw_signal sum_BGsub_signal sum_raw_positions sum_BGsub_position" > BGsubs.stats
+for f in *BGsub.bedgraph
+    do
+        echo $f
+        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' ${f/_BGsub/})
+        BGsub=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
+        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' ${f/_BGsub/})
+        BGsub_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
+        echo "${f/_BGsub.bedgraph/} $total $BGsub $total_pos $BGsub_pos" >> BGsubs.stats
+    done
+```
+
+#### visualize those stats
+```{r}
+(stats <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/BGsubs.stats', header=TRUE) %>% tbl_df %>%
+  mutate(file = sub('^norm_', '', file) %>% 
+           sub('_plus_KevinRoyAfiltered', '', .) %>%
+           sub('_minus_KevinRoyAfiltered', '', .)) %>%
+  group_by(file) %>%
+  summarize(sum_raw_signal = sum(sum_raw_signal),
+            sum_BGsub_signal = sum(sum_BGsub_signal),
+            sum_raw_positions = sum(sum_raw_positions),
+            sum_BGsub_position = sum(sum_BGsub_position)) %>%
+  separate(file, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
+```
+
+
+```{r}
+(stats_signal <- stats %>%
+  dplyr::select(-sum_raw_positions, -sum_BGsub_position) %>%
+  gather(signal_type, sum_signal, -Pap, -strain, -fraction, -rapa, -rep))
+```
+
+```{r}
+filter(stats_signal, rapa == 0)
+```
+
+```{r raw vs BGsub signal}
+filter(stats_signal, rapa == 0) %>%
+  ggplot(., aes(x=rep, y=sum_signal, fill=signal_type)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_grid(fraction ~ Pap+strain) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+```{r}
+(stats_pos <- stats %>%
+  dplyr::select(-sum_raw_signal, -sum_BGsub_signal) %>%
+  gather(signal_type, positive_positions, -Pap, -strain, -fraction, -rapa, -rep))
+```
+
+```{r}
+filter(stats_pos, rapa == 0)
+```
+
+```{r raw vs BGsub above 0 positions}
+filter(stats_pos, rapa == 0) %>%
+  ggplot(., aes(x=rep, y=positive_positions, fill=signal_type)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_grid(fraction ~ Pap+strain) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+
+
+####some sanity check:
+```{bash, eval = FALSE}
+awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph
+#[260006.45369114]
+awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
+#[182215.48998390]
+awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
+#[77790.96370702]
+
+
+awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_minus_KevinRoyAfiltered.bedgraph
+#[250214.42668712]
+awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_neg0_1_minus_KevinRoyAfiltered.bedgraph
+#[171779.07654892]
+awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_minus_KevinRoyAfiltered_BGsub.bedgraph
+#[78435.35013802]
+
+
+##sanity check stats around SNR4 3' end
+
+ip_file="norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph"
+awk '$1=="chrV" && $2 == 424882' $ip_file
+#chrV    424882  424883  22.7472
+
+negip_file=$(echo $ip_file | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
+echo $negip_file
+#norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
+awk '$1=="chrV" && $2 == 424882' $negip_file
+#chrV    424882  424883  135.858
+
+awk '$1=="chrV" && $2 == 424882' ${ip_file/.bedgraph/_BGsub.bedgraph}
+#chrV    424882  424883  -113.1108
+
+bedtools intersect -loj -a $ip_file -b $negip_file | \
+    awk '{OFS="\t"}{if($5 != "."){$9=$4-$8}else{$9=$4};print $0}' | \
+    cut -f 1-3,9 | \
+    awk '$1=="chrV" && $2 == 424882'
+#chrV    424882  424883  -113.111
+
+
+ip_file2="norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph"
+awk '$1=="chrV" && $2 == 424882' $ip_file2
+#chrV    424882  424883  44398.6
+
+negip_file2=$(echo $ip_file2 | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
+echo $negip_file2
+#norm_xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
+awk '$1=="chrV" && $2 == 424882' $negip_file2
+#chrV    424882  424883  43703.8
+
+awk '$1=="chrV" && $2 == 424882' ${ip_file2/.bedgraph/_BGsub.bedgraph}
+#chrV    424882  424883  694.8
+
+bedtools intersect -loj -a $ip_file2 -b $negip_file2 | \
+    awk '{OFS="\t"}{if($5 != "."){$9=$4-$8}else{$9=$4};print $0}' | \
+    cut -f 1-3,9 | \
+    awk '$1=="chrV" && $2 == 424882'
+#chrV    424882  424883  694.8
+```
+
+--> seems to be OK..
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+

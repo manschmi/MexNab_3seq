@@ -1,0 +1,250 @@
+---
+title: "Quality Filtering  and Mapping"
+author: "Manfred Schmid"
+date: "9 August 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Normalize to S.pombe spike-ins. 
+
+First collect the counts for each Spombe transcript:
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+
+### get S.pombe annotations for gene TSS to TES + 300bp
+cd /Users/schmidm/Documents/genomewide_datasets/annotations/Spombe_ENSEMBL_EF2
+
+#extract exons and convert to 0-based
+cat Sp_genes.gtf | awk '{if($3=="exon"){sub("\"","",$12);sub("\";","",$12);print $1"\t"$4-1"\t"$5"\t"$12"\t"$3"\t"$7}}' > Sp_exons.bed
+
+#combine exons of each annotation and extend end by 300bp after TES
+awk '$6=="+"' Sp_exons.bed | sort -k4,4 -k2,2n | awk '{if($4==i){e=$3+300}else{print c"\t"s"\t"e"\t"i"\t"t"\t"str; c=$1;s=$2;e=$3+300;i=$4;t=$5;str=$6}}END{print c"\t"s"\t"e"\t"i"\t"t"\t"str}' | sed 1d | sort -k1,1 -k2,2n > Sp_exons_ends_p300_plus.bed
+
+awk '$6=="-"' Sp_exons.bed | sort -k4,4 -k2,2n | awk '{if($4==i){e=$3}else{print c"\t"s"\t"e"\t"i"\t"t"\t"str; c=$1;s=$2-300;if(s < 0){s=0};e=$3;i=$4;t=$5;str=$6}}END{print c"\t"s"\t"e"\t"i"\t"t"\t"str}' | sed 1d | sort -k1,1 -k2,2n > Sp_exons_ends_p300_minus.bed
+
+## count from raw bedgraphs
+plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/Spombe_ENSEMBL_EF2/Sp_exons_ends_p300_plus.bed"
+minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/Spombe_ENSEMBL_EF2/Sp_exons_ends_p300_minus.bed"
+
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/raw_bedgraph
+
+mkdir Spombe_per_gene_counts
+
+for b in *_plus.bedgraph
+do
+
+  echo "counting plus strand file ${b}"
+  grep -v ^chr $b | bedtools map -a ${plus_bed} -b - -c 4 -o sum > plus.sums
+
+  echo "   minus strand"
+  grep -v ^chr ${b/plus/minus} | bedtools map -a ${minus_bed} -b - -c 4 -o sum > minus.sums
+
+  cat plus.sums minus.sums | sort -k1,1 -k2,2n > Spombe_per_gene_counts/${b/_plus.bedgraph/_Sp.raw_counts}
+
+  rm plus.sums
+  rm minus.sums
+done
+```
+
+
+#### DEseq2 for Spombe size factors
+
+Next step --> feed these counts into DESeq2 and get the sizefactors.
+
+```{r, message=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('DESeq2'))
+```
+
+
+```{r}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/raw_bedgraph/Spombe_per_gene_counts/'
+
+sfx <- '_Sp.raw_counts$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+(Sp_counts_df <- lapply(file_list, function(fname) {read.table(paste0(path,fname,sep=''), col.names=c('chr', 'start', 'end', 'id', 'type', 'strand', 'count'), stringsAsFactors = FALSE) %>% 
+    tbl_df %>%
+  mutate(condition = sub(sfx, '', fname))}) %>%
+  bind_rows() %>%
+  mutate(count = ifelse(count == '.', 0, as.numeric(count))))
+```
+
+
+make count matrix
+```{r}
+Sp_count_mat <- Sp_counts_df %>% 
+  dplyr::select(id,count,condition) %>%
+  tidyr::spread(condition, count) %>%
+  remove_rownames %>%
+  data.frame %>%
+  column_to_rownames(var='id') %>%
+  as.matrix
+
+head(Sp_count_mat)
+```
+
+
+make colData  
+```{r}
+Sp_coldata <- data.frame(condition = colnames(Sp_count_mat) ) %>%
+  tidyr::separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'replicate'), by='_') %>%
+  mutate(condition = paste0(Pap, '_', strain, '_', fraction, '_', rapa))
+
+rownames(Sp_coldata) <- colnames(Sp_count_mat)
+
+Sp_coldata
+```
+
+
+make DESeq object and get sizeFactors
+```{r}
+Sp_ddsFullCountTable <- DESeqDataSetFromMatrix(
+countData = Sp_count_mat,
+colData = Sp_coldata,
+design = ~ condition)
+
+Sp_genes_sf <- sizeFactors(estimateSizeFactors(Sp_ddsFullCountTable))
+
+data.frame(Sp_genes_sf)
+```
+
+#### correct size factor for xPap_Nab2AA_ip_0_1 sample
+
+note this was a mistake already realized during pipetting, ie only for sample xPap_Nab2AA_ip_0_1 was there used 3x more spike-in. This only affects xPap_Nab2AA_ip_0_1 as all other samples are mix of ip_0_2 and ip_0_3.
+
+```{r}
+Sp_genes_sf['xPap_Nab2AA_ip_0_1'] <- Sp_genes_sf['xPap_Nab2AA_ip_0_1']/3
+```
+
+
+
+```{r}
+write.table(Sp_genes_sf, file='data/Sp_genes_sf.txt', col.names=F, quote=F)
+```
+
+
+## use size factors for normalizing track files
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+
+cat ../../Rproject/data/Sp_genes_sf.txt | \
+while read sf
+  do
+    sf_map=(${sf/ / })
+    bdgp="${sf_map[0]}_plus_KevinRoyAfiltered.bedgraph"
+    echo "doing ${bdgp}"
+    echo "  sf: ${sf}"
+    awk -v sf="${sf_map[1]}" '{OFS="\t"}{$4/=sf; print $0}' ${bdgp} > "norm_"${bdgp}
+
+    bdgp="${sf_map[0]}_minus_KevinRoyAfiltered.bedgraph"
+    echo "doing ${bdgp}"
+    awk -v sf="${sf_map[1]}" '{OFS="\t"}{$4/=sf; print $0}' ${bdgp} > "norm_"${bdgp}
+  done
+
+mkdir ../norm_and_pA_filtered_bedgraph
+mv norm*.bedgraph ../norm_and_pA_filtered_bedgraph/.
+```
+
+
+```{bash, eval=FALSE}
+##  sanity check
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
+
+rm tmp
+for f in *.bedgraph
+  do
+    echo $f >> tmp
+    awk '{sum+=$4}END{print sum}' $f >> tmp
+  done
+
+cat tmp | paste - - > total_reads_after_norm.txt
+rm tmp
+
+cat total_reads_after_norm.txt
+#norm_noPap_Mex67AA_input_0_1_minus_KevinRoyAfiltered.bedgraph   2.43361e+06
+#norm_noPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph    2.55553e+06
+#norm_noPap_Mex67AA_input_15_1_minus_KevinRoyAfiltered.bedgraph  1.9983e+06
+#norm_noPap_Mex67AA_input_15_1_plus_KevinRoyAfiltered.bedgraph   2.02684e+06
+#norm_noPap_Mex67AA_input_70_1_minus_KevinRoyAfiltered.bedgraph  1.65716e+06
+#norm_noPap_Mex67AA_input_70_1_plus_KevinRoyAfiltered.bedgraph   1.70777e+06
+#norm_noPap_Mex67AA_ip_0_1_minus_KevinRoyAfiltered.bedgraph      249030
+#norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph       258897
+#norm_noPap_Mex67AA_ip_15_1_minus_KevinRoyAfiltered.bedgraph     158037
+#norm_noPap_Mex67AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph      161639
+#norm_noPap_Mex67AA_ip_70_1_minus_KevinRoyAfiltered.bedgraph     119204
+#norm_noPap_Mex67AA_ip_70_1_plus_KevinRoyAfiltered.bedgraph      120507
+#norm_noPap_Mex67AA_ip_neg0_1_minus_KevinRoyAfiltered.bedgraph   171207
+#norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph    181610
+#norm_noPap_Nab2AA_input_0_1_minus_KevinRoyAfiltered.bedgraph    2.56773e+06
+#norm_noPap_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bedgraph     2.68443e+06
+#norm_noPap_Nab2AA_input_15_1_minus_KevinRoyAfiltered.bedgraph   2.09161e+06
+#norm_noPap_Nab2AA_input_15_1_plus_KevinRoyAfiltered.bedgraph    2.08234e+06
+#norm_noPap_Nab2AA_ip_0_1_minus_KevinRoyAfiltered.bedgraph       210330
+#norm_noPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph        218405
+#norm_noPap_Nab2AA_ip_15_1_minus_KevinRoyAfiltered.bedgraph      149455
+#norm_noPap_Nab2AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph       149500
+#norm_xPap_Mex67AA_input_0_1_minus_KevinRoyAfiltered.bedgraph    8.25383e+06
+#norm_xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph     8.62037e+06
+#norm_xPap_Mex67AA_input_15_1_minus_KevinRoyAfiltered.bedgraph   8.16976e+06
+#norm_xPap_Mex67AA_input_15_1_plus_KevinRoyAfiltered.bedgraph    9.36925e+06
+#norm_xPap_Mex67AA_input_70_1_minus_KevinRoyAfiltered.bedgraph   6.35928e+06
+#norm_xPap_Mex67AA_input_70_1_plus_KevinRoyAfiltered.bedgraph    8.37977e+06
+#norm_xPap_Mex67AA_ip_0_1_minus_KevinRoyAfiltered.bedgraph       1.53072e+06
+#norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph        1.68999e+06
+#norm_xPap_Mex67AA_ip_0_2_minus_KevinRoyAfiltered.bedgraph       1.59472e+06
+#norm_xPap_Mex67AA_ip_0_2_plus_KevinRoyAfiltered.bedgraph        1.7808e+06
+#norm_xPap_Mex67AA_ip_0_3_minus_KevinRoyAfiltered.bedgraph       1.64742e+06
+#norm_xPap_Mex67AA_ip_0_3_plus_KevinRoyAfiltered.bedgraph        1.83246e+06
+#norm_xPap_Mex67AA_ip_15_1_minus_KevinRoyAfiltered.bedgraph      1.20754e+06
+#norm_xPap_Mex67AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph       1.45439e+06
+#norm_xPap_Mex67AA_ip_15_2_minus_KevinRoyAfiltered.bedgraph      1.66736e+06
+#norm_xPap_Mex67AA_ip_15_2_plus_KevinRoyAfiltered.bedgraph       1.91464e+06
+#norm_xPap_Mex67AA_ip_15_3_minus_KevinRoyAfiltered.bedgraph      1.3106e+06
+#norm_xPap_Mex67AA_ip_15_3_plus_KevinRoyAfiltered.bedgraph       1.51454e+06
+#norm_xPap_Mex67AA_ip_70_1_minus_KevinRoyAfiltered.bedgraph      1.01954e+06
+#norm_xPap_Mex67AA_ip_70_1_plus_KevinRoyAfiltered.bedgraph       1.15722e+06
+#norm_xPap_Mex67AA_ip_70_2_minus_KevinRoyAfiltered.bedgraph      874935
+#norm_xPap_Mex67AA_ip_70_2_plus_KevinRoyAfiltered.bedgraph       1.00957e+06
+#norm_xPap_Mex67AA_ip_70_3_minus_KevinRoyAfiltered.bedgraph      970698
+#norm_xPap_Mex67AA_ip_70_3_plus_KevinRoyAfiltered.bedgraph       1.0962e+06
+#norm_xPap_Mex67AA_ip_neg0_1_minus_KevinRoyAfiltered.bedgraph    641448
+#norm_xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph     735691
+#norm_xPap_Nab2AA_input_0_1_minus_KevinRoyAfiltered.bedgraph     7.70249e+06
+#norm_xPap_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bedgraph      8.36349e+06
+#norm_xPap_Nab2AA_input_15_1_minus_KevinRoyAfiltered.bedgraph    8.54599e+06
+#norm_xPap_Nab2AA_input_15_1_plus_KevinRoyAfiltered.bedgraph     9.05139e+06
+#norm_xPap_Nab2AA_ip_0_1_minus_KevinRoyAfiltered.bedgraph        1.06693e+06
+#norm_xPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph 1.15406e+06
+#norm_xPap_Nab2AA_ip_0_2_minus_KevinRoyAfiltered.bedgraph        1.35502e+06
+#norm_xPap_Nab2AA_ip_0_2_plus_KevinRoyAfiltered.bedgraph 1.47652e+06
+#norm_xPap_Nab2AA_ip_0_3_minus_KevinRoyAfiltered.bedgraph        1.19221e+06
+#norm_xPap_Nab2AA_ip_0_3_plus_KevinRoyAfiltered.bedgraph 1.32441e+06
+#norm_xPap_Nab2AA_ip_15_1_minus_KevinRoyAfiltered.bedgraph       1.60614e+06
+#norm_xPap_Nab2AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph        1.85516e+06
+#norm_xPap_Nab2AA_ip_15_2_minus_KevinRoyAfiltered.bedgraph       1.64819e+06
+#norm_xPap_Nab2AA_ip_15_2_plus_KevinRoyAfiltered.bedgraph        1.86708e+06
+#norm_xPap_Nab2AA_ip_15_3_minus_KevinRoyAfiltered.bedgraph       1.34878e+06
+#norm_xPap_Nab2AA_ip_15_3_plus_KevinRoyAfiltered.bedgraph        1.50255e+06
+```
+
+--> similar samples have very similar read counts but between ie ip vs input and xPap vs noPap there are huge differences.
+
+
+
+```{r}
+sessionInfo()
+```
+

@@ -13,6 +13,8 @@ knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_counting/', dev=
 suppressWarnings(library('tidyverse'))
 suppressWarnings(library('magrittr'))
 suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+
 ```
 
 
@@ -206,95 +208,149 @@ cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/*_pAfilter.counts > /Us
 
 # counting
 
-```{bash, eval=FALSE}
-#### NORMALIZED to S.pombe input FILES
+done using a simple bash script bed_count.sh that uses awk + bedtools
+```{bash bed_count.sh, eval=FALSE}
+#!/usr/bin/env bash
 
+#expands a bedgraph file to single nucleotide intervals of file $2
+# and uses bedtools map to count up features over file $1
+# using sum over column $3
+# output goes to file $4
+#ie line from file $2:
+#   chrI 10 12 20 2 +
+#will be converted to:
+#   chrI 10 11 20 2 +
+#   chrI 11 12 20 2 +
+# and counts from this file over interval in $1
+#   chrI 5 20 . . +
+# will give chrI 5 20 . . + 4
+
+awk '{OFS="\t"}
+{ start=$2;
+  end=$3;
+  for(i=start;i<end;i++){
+    $2=i;
+    $3=i+1;
+    print $0
+  }
+}' $2 | \
+sort -k1,1 -k2,2n | \
+bedtools map -a $1 -b - -c $3 -o sum > $4
+```
+
+
+```{bash, eval=FALSE}
+## NORMALIZED to S.pombe track files
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+
+#### annotation files
 body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
 body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
 ends_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_plus.bed"
 ends_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_minus.bed"
 
-
-# A-filtered bigwigs location
-cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
-
+#### counts for input FILES
 for f in *input*_plus_KevinRoyAfiltered.bedgraph
   do
      echo "end reads counting"
      echo $f
-     sort -k1,1 -k2,2n $f | \
-     bedtools map -c 4 -o sum -a $ends_plus_bed -b - > plus_gene_endpm200.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
 
      fminus="${f/_plus/_minus}"
      echo $fminus
-     sort -k1,1 -k2,2n $fminus | \
-     bedtools map -c 4 -o sum -a $ends_minus_bed -b - > minus_gene_endpm200.counts
-
-     echo "body reads counting"
-     sort -k1,1 -k2,2n $f | \
-     bedtools map -c 4 -o sum -a $body_plus_bed -b - > plus_gene_body.counts
-
-     echo $fminus
-     sort -k1,1 -k2,2n $fminus | \
-     bedtools map -c 4 -o sum -a $body_minus_bed -b - > minus_gene_body.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
 
      echo "merging ends"
      cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_anno.txt}
 
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
      echo "merging body"
      cat plus_gene_body.counts minus_gene_body.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
-
-     rm plus_gene_endpm200.counts
-     rm minus_gene_endpm200.counts
-     rm plus_gene_body.counts
-     rm minus_gene_body.counts
      echo "done"
   done
 
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
 
-#### BGsub IP NORMALIZED to S.pombe FILES
+
+
+
+#### counts for BGsub IP
 for f in *ip*_plus_KevinRoyAfiltered_BGsub.bedgraph
   do
-     echo "end reads counting"
-     echo $f
-     sort -k1,1 -k2,2n $f | \
-     bedtools map -c 4 -o sum -a $ends_plus_bed -b - > plus_gene_endpm200.counts
-
      fminus="${f/_plus/_minus}"
-     echo $fminus
-     sort -k1,1 -k2,2n $fminus | \
-     bedtools map -c 4 -o sum -a $ends_minus_bed -b - > minus_gene_endpm200.counts
+     echo "plus strand file "$f
+     echo "minus strand file "$fminus
 
-     echo "body reads counting"
-     sort -k1,1 -k2,2n $f | \
-     bedtools map -c 4 -o sum -a $body_plus_bed -b - > plus_gene_body.counts
-
-     echo $fminus
-     sort -k1,1 -k2,2n $fminus | \
-     bedtools map -c 4 -o sum -a $body_minus_bed -b - > minus_gene_body.counts
+     echo "end reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
 
      echo "merging ends"
      cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_endpm200_count_sum_per_anno.txt}
 
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
      echo "merging body"
      cat plus_gene_body.counts minus_gene_body.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_body_endsm200_cleaned_count_sum_per_anno.txt}
 
-     rm plus_gene_endpm200.counts
-     rm minus_gene_endpm200.counts
-     rm plus_gene_body.counts
-     rm minus_gene_body.counts
      echo "done"
   done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+
+#### counts for NON-BGsub IP
+for f in *ip*_plus_KevinRoyAfiltered.bedgraph
+  do
+     fminus="${f/_plus/_minus}"
+     echo "plus strand file "$f
+     echo "minus strand file "$fminus
+
+     echo "end reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+     echo "merging ends"
+     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_anno.txt}
+
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+     echo "merging body"
+     cat plus_gene_body.counts minus_gene_body.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
+
+     echo "done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
 ```
 
 
 
-# Load counts into R
 
+# Load counts into R
 
 ```{r}
 read_bedgraph_sums <- function(path, file_list, sfx) {
@@ -315,8 +371,6 @@ sfx <- '_endpm200_count_sum_per_anno.txt$'
 
 file_list <- dir(path)[grep(sfx, dir(path))]
 
-file_list %<>% keep( (grepl('ip', .) & grepl('BGsub', .)) | grepl('input', .))
-
 file_list
 ```
 
@@ -331,8 +385,6 @@ file_list
 sfx <- '_body_endsm200_cleaned_count_sum_per_anno.txt$'
 
 file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list %<>% keep( (grepl('ip', .) & grepl('BGsub', .)) | grepl('input', .))
 
 file_list
 ```
@@ -350,6 +402,69 @@ file_list
    mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
                          grepl('^xPappAminus', .$condition) ~ 'pA-',
                          TRUE ~ 'pA+ + pA-')))
+```
+
+
+## Sanity check BGsub and pA minus method
+
+simply check that 
+1. norm. counts for $BGsub = normIP  -  normnegativeIP$  
+2. norm. counts for $pAminus = pAplusandminus  -  pAplus$  
+
+#### BGsub
+```{r}
+IP_raw <- filter(both_df, grepl('ip', condition) & !(grepl('BGsub', condition))) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop')
+
+IP_neg <- filter(both_df, grepl('ip_neg0', condition)) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::select(-rapa, -rep) %>%
+  dplyr::rename(ip_neg_sum = sum)
+
+IP_BGsub <- filter(both_df, grepl('ip', condition) & (grepl('BGsub', condition))) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::rename(BGsub_sum = sum)
+```
+
+
+```{r}
+IP_BGsub_redone <- left_join(IP_raw, IP_neg) %>%
+  mutate(BGsub_sum_redone = sum - ip_neg_sum) %>%
+  dplyr::select(-sum, -ip_neg_sum)
+```
+
+```{r}
+(BGsub_comparison <- left_join(IP_BGsub_redone, IP_BGsub) %>%
+   mutate(relative_error = (BGsub_sum_redone-BGsub_sum)/BGsub_sum))
+```
+
+```{r}
+BGsub_comparison %>%
+  filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
+  group_by(pA, part, Pap, strain, rapa, rep) %>%
+  #summarize(cnt=n()) %>% kable
+  do(tidy(cor.test(.$BGsub_sum, .$BGsub_sum_redone))) %>%
+  kable
+```
+
+```{r}
+BGsub_comparison %>%
+  filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
+  group_by(pA, part, Pap, strain, rapa, rep) %>%
+  do(tidy(summary(.$relative_error))) %>% kable
+```
+
+--> perfectly correlated and same values
+--> OK
+
+
+## work only with BGsub IPs
+
+```{r}
+both_df %<>% 
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
+  filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
+  dplyr::select(-BGsub)
 ```
 
 
@@ -381,12 +496,12 @@ body regions stripped for overlapping ends and content of masked genomic pA in t
 
 ```{r}
 (both_df %<>% 
-  dplyr::select(id, sum, part, pA, condition) %>%
+  dplyr::select(id, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
   left_join(., anno) %>%
   mutate(scaled_reads = ifelse(part == 'body',
                                sum/pAfiltered_cleaned_body_len,
                                sum)) %>%
-  dplyr::select(id, name, common_name, type, part, pA, condition, sum, scaled_reads))
+  dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
 ```
 
 
@@ -395,14 +510,14 @@ body regions stripped for overlapping ends and content of masked genomic pA in t
 ```{r}
 filter(both_df,
        common_name == 'PMA1',
-       grepl('_0_1', condition)) %>%
+       rapa == 0, rep == 1) %>%
   kable
 ```
 
 ```{r}
 filter(both_df,
        common_name == 'PGK1',
-       grepl('_0_1', condition)) %>%
+       rapa == 0, rep == 1) %>%
   kable
 ```
 
@@ -411,6 +526,166 @@ filter(both_df,
 ```{r}
 save(both_df, file='data/norm_signal_body_end_pA+_pA-_BGsub.RData')
 ```
+
+
+
+# End vs body pA+ vs pA-
+
+Global distribution of pA+ and pA- signal in gene body an gene end regions.
+
+## sum signal per annotation class and sample
+```{r}
+(both_totals <- both_df %>%
+  #mutate(sum = ifelse(sum < 0, 0, sum)) %>%
+  group_by(type, Pap, strain,fraction, rapa, part, pA, rep) %>% 
+  summarize(total_Spnorm_signal = sum(sum)))
+```
+
+```{r barplot total all samples }
+both_totals %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r barplot total all samples rep1 rapa0}
+both_totals %>%
+  filter(rapa == 0, rep == 1) %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r barplot totals per type all samples rep1 rapa0}
+both_totals %>%
+  filter(rapa == 0, rep == 1) %>%
+ggplot(., aes(x=part, y=total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~type+strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r barplot totals ORF-T all samples rep1 rapa0}
+both_totals %>%
+  filter(rapa == 0, rep == 1, type == 'ORF-T') %>%
+ggplot(., aes(x=part, y=total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~type+strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+#### total signal per type
+
+```{r barplot signal per type and part}
+both_totals %>%
+  filter(rapa == '0', rep == '1') %>%
+  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~part+strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() 
+```
+
+```{r barplot signal per type wo part}
+both_totals %>%
+  filter(rapa == '0', rep == '1') %>%
+  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() 
+```
+
+
+#### pAplus vs pAminus body vs end pie
+
+```{r}
+pAplusandminus_totals <- filter(both_totals, pA == 'pA+ + pA-') %>%
+  ungroup %>%
+  dplyr::select(type, strain, fraction, rapa, rep, part, total_Spnorm_signal) %>%
+  dplyr::rename(pAplusandminus_total = total_Spnorm_signal)
+
+pAminus_totals <- filter(both_totals, pA == 'pA-') %>%
+  ungroup %>%
+  dplyr::select(type, strain, fraction, rapa, rep, part, total_Spnorm_signal) %>%
+  dplyr::rename(pAminus_total = total_Spnorm_signal)
+
+pie_percents_pAplusandminus <- left_join(pAplusandminus_totals, pAminus_totals) %>%
+  mutate(pAplus_total = pAplusandminus_total - pAminus_total) %>%
+  dplyr::select(-pAplusandminus_total) %>%
+  gather(pA, total_Spnorm_signal, -type, -strain, -fraction, -rapa, -rep, -part) %>%
+  unite(part, c(part, pA), sep='_') %>%
+  group_by(type, strain, fraction, rapa, rep) %>%
+  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
+```
+
+
+```{r}
+pie_percents_pAplusandminus %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(fraction+strain~type+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+
+#### E-PAP libraries piechart
+
+```{r EPAP libraries piechart}
+pie_percents_pAplusandminus <- filter(both_totals, pA == 'pA+ + pA-') %>%
+  group_by(pA, type, strain, fraction, rapa, rep) %>%
+  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
+
+pie_percents_pAplusandminus %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(fraction+strain~type+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+#### noPAP libraries piechart
+
+```{r noPAP libraries piechart}
+pie_percents_pAplus <- filter(both_totals, pA == 'pA+') %>%
+  group_by(pA, type, strain, fraction, rapa, rep) %>%
+  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
+
+pie_percents_pAplus %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(fraction+strain~type+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
 
 ```{r}
 sessionInfo()

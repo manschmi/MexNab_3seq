@@ -643,7 +643,7 @@ kable(pie_percents_pAplusandminus)
 ```
 
 
-```{r}
+```{r piechart body vs end pAplus vs pAminus}
 pie_percents_pAplusandminus %>%
   filter(rapa == '0') %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 

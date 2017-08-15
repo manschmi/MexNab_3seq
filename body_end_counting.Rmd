@@ -618,13 +618,17 @@ both_totals %>%
 pAplusandminus_totals <- filter(both_totals, pA == 'pA+ + pA-') %>%
   ungroup %>%
   dplyr::select(type, strain, fraction, rapa, rep, part, total_Spnorm_signal) %>%
+    mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
   dplyr::rename(pAplusandminus_total = total_Spnorm_signal)
 
 pAminus_totals <- filter(both_totals, pA == 'pA-') %>%
   ungroup %>%
   dplyr::select(type, strain, fraction, rapa, rep, part, total_Spnorm_signal) %>%
+    mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
   dplyr::rename(pAminus_total = total_Spnorm_signal)
+```
 
+```{r}
 pie_percents_pAplusandminus <- left_join(pAplusandminus_totals, pAminus_totals) %>%
   mutate(pAplus_total = pAplusandminus_total - pAminus_total) %>%
   dplyr::select(-pAplusandminus_total) %>%
@@ -634,6 +638,10 @@ pie_percents_pAplusandminus <- left_join(pAplusandminus_totals, pAminus_totals) 
   mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
 ```
 
+```{r}
+kable(pie_percents_pAplusandminus)
+```
+
 
 ```{r}
 pie_percents_pAplusandminus %>%
@@ -641,7 +649,7 @@ pie_percents_pAplusandminus %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
   geom_bar(stat='identity') +
   coord_polar(theta='y') +
-  facet_grid(fraction+strain~type+rapa+rep, scales='free') +
+  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
   theme_bw() +
   theme(axis.text.x = element_blank())
@@ -661,7 +669,7 @@ pie_percents_pAplusandminus %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
   geom_bar(stat='identity') +
   coord_polar(theta='y') +
-  facet_grid(fraction+strain~type+rapa+rep, scales='free') +
+  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
   theme_bw() +
   theme(axis.text.x = element_blank())
@@ -680,7 +688,27 @@ pie_percents_pAplus %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
   geom_bar(stat='identity') +
   coord_polar(theta='y') +
-  facet_grid(fraction+strain~type+rapa+rep, scales='free') +
+  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+#### pAminus piechart
+
+```{r pAminus libraries piechart}
+pie_percents_pAminus <- filter(both_totals, pA == 'pA-') %>%
+  mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
+  group_by(pA, type, strain, fraction, rapa, rep) %>%
+  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
+
+pie_percents_pAminus %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
   theme_bw() +
   theme(axis.text.x = element_blank())

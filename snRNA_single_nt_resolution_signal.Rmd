@@ -165,7 +165,7 @@ add missing values ...
 (d %<>% 
   spread(rel_pos, norm_counts) %>% 
   gather(rel_pos, norm_counts, -id, -Pap, -strain, -fraction, -rapa, -rep) %>%
-  mutate(norm_counts = ifelse(is.na(norm_counts), 0, norm_counts),
+  mutate(norm_counts = ifelse(is.na(norm_counts) | norm_counts < 0, 0, norm_counts),
          rel_pos = as.integer(rel_pos)))
 ```
 
@@ -215,6 +215,21 @@ ggplot(., aes(x=rel_pos, y=norm_counts)) +
   geom_text(data=filter(medians_per_position, rapa=='0', rel_pos == 0),
             aes(x=rel_pos, y=1000000, label=round(median_norm_counts,0)), color='red') +
   scale_y_log10() +
+  facet_grid(strain+fraction~Pap+rep, scales='free') +
+  xlim(-10,10) +
+  theme_bw()
+```
+
+```{r distribution points and median line and 0pos as text without log}
+d %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=rel_pos, y=norm_counts)) + 
+  geom_point(size=.4) + 
+  geom_line(data=filter(medians_per_position, rapa=='0'), 
+            aes(x=rel_pos, y=median_norm_counts),
+            color='red') +
+  geom_text(data=filter(medians_per_position, rapa=='0', rel_pos == 0),
+            aes(x=rel_pos, y=1000000, label=round(median_norm_counts,0)), color='red') +
   facet_grid(strain+fraction~Pap+rep, scales='free') +
   xlim(-10,10) +
   theme_bw()

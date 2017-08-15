@@ -1,0 +1,236 @@
+---
+title: "Count body and end signal for the various samples and tracks"
+author: "Manfred Schmid"
+date: "9 August 2017"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_clustering/', dev='pdf')
+```
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+```
+
+
+# load the counts
+
+-> from script body_end_counting.Rmd  
+```{r}
+load('data/norm_signal_body_end_pA+_pA-_BGsub.RData')
+
+both_df
+```
+
+
+# Correlation body and end pAplus vs pAplus+minus
+
+```{r}
+wide_df <- both_df %>% 
+  filter(rapa==0, scaled_reads > 0, pA != 'pA-') %>%
+  tidyr::unite(condition, c(part, pA, strain, fraction, rapa, rep), sep='_') %>% 
+  dplyr::select(id, condition, scaled_reads) %>%
+  spread(condition, scaled_reads)
+```
+
+```{r}
+wide_mat <- wide_df %>%
+  dplyr::select(-id) %>%
+  as.matrix %>%
+  t 
+```
+
+```{r eucldiian distance pAplus and pApluspluspAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  dist
+
+hc <- hclust(dist, method = 'ward.D2')
+
+plot(hc)
+```
+
+```{r}
+cor_dist <- function(matrix, ...) {
+  cor <- cor(t(matrix), ...)
+  as.dist( (-.5*cor)+.5 )
+}
+```
+
+```{r pearson distance pAplus and pApluspluspAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  cor_dist(., method='pearson', use='pairwise.complete')
+
+hc <- hclust(dist, method = 'ward.D2')
+
+pearson_hc_order <- hc$labels[hc$order]
+
+plot(hc)
+```
+
+```{r spearman distance pAplus and pApluspluspAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  cor_dist(., method='spearman', use='pairwise.complete')
+
+hc <- hclust(dist, method = 'ward.D2')
+
+spearman_hc_order <- hc$labels[hc$order]
+
+plot(hc)
+```
+
+
+```{r pearson correlation matrix pAplus and pApluspluspAminus}
+cor_df <- wide_mat %>%
+  t %>%
+  log2 %>%
+  na.omit %>%
+  cor(., method='pearson', use='pairwise.complete') %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1)
+
+cor_df %>%
+  mutate(study1 = factor(study1, levels=pearson_hc_order),
+         study2 = factor(study2, levels=pearson_hc_order)) %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient(low='#e5e5be', high='#003973', limits=c(0,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6))
+```
+
+
+```{r spearman correlation matrix pAplus and pApluspluspAminus}
+cor_df <- wide_mat %>%
+  t %>%
+  log2 %>%
+  na.omit %>%
+  cor(., method='spearman', use='pairwise.complete') %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1)
+
+cor_df %>%
+  mutate(study1 = factor(study1, levels=spearman_hc_order),
+         study2 = factor(study2, levels=spearman_hc_order)) %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient(low='#e5e5be', high='#003973', limits=c(0,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6))
+```
+
+
+# Correlation body and end pAplus vs pAminus
+
+```{r}
+wide_df <- both_df %>% 
+  filter(rapa==0, scaled_reads > 0, pA != 'pA+ + pA-') %>%
+  tidyr::unite(condition, c(part, pA, strain, fraction, rapa, rep), sep='_') %>% 
+  dplyr::select(id, condition, scaled_reads) %>%
+  spread(condition, scaled_reads)
+```
+
+```{r}
+wide_mat <- wide_df %>%
+  dplyr::select(-id) %>%
+  as.matrix %>%
+  t 
+```
+
+```{r euclidian distance pAplus and pAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  dist
+
+hc <- hclust(dist, method = 'ward.D2')
+
+plot(hc)
+```
+
+```{r}
+cor_dist <- function(matrix, ...) {
+  cor <- cor(t(matrix), ...)
+  as.dist( (-.5*cor)+.5 )
+}
+```
+
+```{r pearson distance pAplus and pAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  cor_dist(., method='pearson', use='pairwise.complete')
+
+hc <- hclust(dist, method = 'ward.D2')
+
+pearson_hc_order <- hc$labels[hc$order]
+
+plot(hc)
+```
+
+```{r spearman distance pAplus and pAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  cor_dist(., method='spearman', use='pairwise.complete')
+
+hc <- hclust(dist, method = 'ward.D2')
+
+spearman_hc_order <- hc$labels[hc$order]
+
+plot(hc)
+```
+
+
+```{r pearson correlation matrix pAplus and pAminus}
+cor_df <- wide_mat %>%
+  t %>%
+  log2 %>%
+  na.omit %>%
+  cor(., method='pearson', use='pairwise.complete') %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1)
+
+cor_df %>%
+  mutate(study1 = factor(study1, levels=pearson_hc_order),
+         study2 = factor(study2, levels=pearson_hc_order)) %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient2(low='firebrick4', mid='#e5e5be', high='#003973', limits=c(-1,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6))
+```
+
+
+```{r spearman correlation matrix pAplus and pAminus}
+cor_df <- wide_mat %>%
+  t %>%
+  log2 %>%
+  na.omit %>%
+  cor(., method='spearman', use='pairwise.complete') %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1)
+
+cor_df %>%
+  mutate(study1 = factor(study1, levels=spearman_hc_order),
+         study2 = factor(study2, levels=spearman_hc_order)) %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient2(low='firebrick4', mid='#e5e5be', high='#003973', limits=c(-1,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6))
+```
+
+```{r}
+sessionInfo()
+```
+
+
+

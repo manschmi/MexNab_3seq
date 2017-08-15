@@ -481,8 +481,9 @@ Annotations for correction to body length …
 body regions stripped for overlapping ends and content of masked genomic pA in this region
 ```{r}
 (effective_body_and_genomic_pA_counts <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/genomic_pA_per_cleaned_body.txt', col.names=c('chr', 'start', 'end', 'id', 'pAfilter_count'), stringsAsFactors = FALSE) %>%
-   mutate(body_len = end-start,
-          pAfiltered_cleaned_body_len = body_len - as.integer(pAfilter_count)) %>%
+   mutate(pAfilter_count = ifelse(pAfilter_count == '.', 0, as.integer(pAfilter_count)),
+          body_len = end-start,
+          pAfiltered_cleaned_body_len = body_len - pAfilter_count) %>%
    dplyr::select(-chr,-start, -end) %>%
    tbl_df)
 ```
@@ -491,8 +492,6 @@ body regions stripped for overlapping ends and content of masked genomic pA in t
 ```{r}
 (anno <- left_join(anno, effective_body_and_genomic_pA_counts))
 ```
-
-…. note some regions are NA … ie there is no body, either completely overlapping with ends or otherwise the annotation is too short!!
 
 ```{r}
 (both_df %<>% 
@@ -503,6 +502,40 @@ body regions stripped for overlapping ends and content of masked genomic pA in t
                                sum)) %>%
   dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
 ```
+
+
+#### sanity check non-exisiting gene bodies
+…. note some regions pAfiltered_cleaned_body_len are NA … ie there is no body, either completely overlapping with ends or otherwise the annotation is too short (or only consists of masked genomic A, although this probably never happens) !! 
+-> there should be no reads for those
+-> sanity check all with pAfiltered_cleaned_body_len == NA should never have counts
+
+```{r}
+body_len_NA_ids <- filter(anno, is.na(pAfiltered_cleaned_body_len)) %$% id %>% unique
+```
+
+```{r}
+length(body_len_NA_ids)
+```
+actually quite a few transciption units have this
+
+```{r}
+table(anno$type[anno$id %in% body_len_NA_ids])
+```
+mostly CUTs, many SUTs, some snRNAs very few ORFs.  
+
+
+```{r}
+filter(both_df, part == 'body', id %in% body_len_NA_ids)
+```
+
+```{r}
+filter(both_df, part == 'end', id %in% body_len_NA_ids)
+```
+
+
+--> seems correct, we never count body for those where the region does not exist. But ends are apprently counted ...
+
+
 
 
 #### look at some single genes
@@ -517,6 +550,14 @@ filter(both_df,
 ```{r}
 filter(both_df,
        common_name == 'PGK1',
+       rapa == 0, rep == 1) %>%
+  kable
+```
+
+
+```{r}
+filter(both_df,
+       common_name == 'SNR11',
        rapa == 0, rep == 1) %>%
   kable
 ```
@@ -629,8 +670,10 @@ pAminus_totals <- filter(both_totals, pA == 'pA-') %>%
 ```
 
 ```{r}
-pie_percents_pAplusandminus <- left_join(pAplusandminus_totals, pAminus_totals) %>%
-  mutate(pAplus_total = pAplusandminus_total - pAminus_total) %>%
+pie_percents_pAplusvsminus <- left_join(pAplusandminus_totals, pAminus_totals) %>%
+  mutate(pAplus_total = ifelse(pAplusandminus_total > pAminus_total,
+                               pAplusandminus_total - pAminus_total,
+                               0)) %>%
   dplyr::select(-pAplusandminus_total) %>%
   gather(pA, total_Spnorm_signal, -type, -strain, -fraction, -rapa, -rep, -part) %>%
   unite(part, c(part, pA), sep='_') %>%
@@ -639,13 +682,16 @@ pie_percents_pAplusandminus <- left_join(pAplusandminus_totals, pAminus_totals) 
 ```
 
 ```{r}
-kable(pie_percents_pAplusandminus)
+pie_percents_pAplusvsminus %>%
+  ungroup %>%
+  arrange(type, strain, fraction, rapa, rep, part) %>%
+  kable
 ```
 
 
 ```{r piechart body vs end pAplus vs pAminus}
-pie_percents_pAplusandminus %>%
-  filter(rapa == '0') %>%
+pie_percents_pAplusvsminus %>%
+  filter(rapa == '0') %>% 
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
   geom_bar(stat='identity') +
   coord_polar(theta='y') +
@@ -714,6 +760,107 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
   theme(axis.text.x = element_blank())
 ```
 
+
+
+# Correlation body and end
+
+```{r}
+wide_df <- both_df %>% 
+  filter(rapa==0, scaled_reads > 0, pA != 'pA-') %>%
+  tidyr::unite(condition, c(part, pA, strain, fraction, rapa, rep), sep='_') %>% 
+  dplyr::select(id, condition, scaled_reads) %>%
+  spread(condition, scaled_reads)
+```
+
+```{r}
+wide_mat <- wide_df %>%
+  dplyr::select(-id) %>%
+  as.matrix %>%
+  t 
+```
+
+```{r eucldiian distance pAplus and pApluspluspAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  dist
+
+hc <- hclust(dist, method = 'ward.D2')
+
+plot(hc)
+```
+
+```{r}
+cor_dist <- function(matrix, ...) {
+  cor <- cor(t(matrix), ...)
+  as.dist( (-.5*cor)+.5 )
+}
+```
+
+```{r pearson distance pAplus and pApluspluspAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  cor_dist(., method='pearson', use='pairwise.complete')
+
+hc <- hclust(dist, method = 'ward.D2')
+
+pearson_hc_order <- hc$labels[hc$order]
+
+plot(hc)
+```
+
+```{r spearman distance pAplus and pApluspluspAminus}
+dist <- wide_mat %>%
+  log2 %>%
+  cor_dist(., method='spearman', use='pairwise.complete')
+
+hc <- hclust(dist, method = 'ward.D2')
+
+spearman_hc_order <- hc$labels[hc$order]
+
+plot(hc)
+```
+
+
+```{r pearson correlation matrix pAplus and pApluspluspAminus}
+cor_df <- wide_mat %>%
+  t %>%
+  log2 %>%
+  na.omit %>%
+  cor(., method='pearson', use='pairwise.complete') %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1)
+
+cor_df %>%
+  mutate(study1 = factor(study1, levels=pearson_hc_order),
+         study2 = factor(study2, levels=pearson_hc_order)) %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient(low='#e5e5be', high='#003973', limits=c(0,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6))
+```
+
+
+```{r spearman correlation matrix pAplus and pApluspluspAminus}
+cor_df <- wide_mat %>%
+  t %>%
+  log2 %>%
+  na.omit %>%
+  cor(., method='spearman', use='pairwise.complete') %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1)
+
+cor_df %>%
+  mutate(study1 = factor(study1, levels=spearman_hc_order),
+         study2 = factor(study2, levels=spearman_hc_order)) %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient(low='#e5e5be', high='#003973', limits=c(0,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6))
+```
 
 ```{r}
 sessionInfo()

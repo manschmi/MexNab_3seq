@@ -405,6 +405,11 @@ file_list
 ```
 
 
+```{r}
+save(both_df, file='data/norm_signal_body_end_raw_all.RData')
+```
+
+
 ## Sanity check BGsub and pA minus method
 
 simply check that 

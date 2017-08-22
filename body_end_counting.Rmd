@@ -238,7 +238,52 @@ sort -k1,1 -k2,2n | \
 bedtools map -a $1 -b - -c $3 -o sum > $4
 ```
 
+#### counting raw reads files
+```{bash, eval = FALSE}
+#### NON-NORMALIZED FILES
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_minus.bed"
 
+
+# A-filtered count files
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+
+for f in *plus_KevinRoyAfiltered.bedgraph
+  do
+     echo "end reads counting"
+     echo $f
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+
+     fminus="${f/_plus/_minus}"
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+     echo "merging ends"
+     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_anno.txt}
+
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+     echo "merging body"
+     cat plus_gene_body.counts minus_gene_body.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
+     echo "done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+```
+
+
+#### counting Sp-normalized files
 ```{bash, eval=FALSE}
 ## NORMALIZED to S.pombe track files
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
@@ -364,6 +409,57 @@ read_bedgraph_sums <- function(path, file_list, sfx) {
 ```
 
 
+
+## raw counts
+
+#### load and combine end counts
+```{r}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/bedtools_counts/'
+sfx <- '_endpm200_count_sum_per_anno.txt$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+file_list
+```
+
+
+```{r, warning=FALSE}
+(end_counts_df <- read_bedgraph_sums(path, file_list, sfx))
+```
+
+
+#### load and combine body counts
+```{r}
+sfx <- '_body_endsm200_cleaned_count_sum_per_anno.txt$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+file_list
+```
+
+```{r, warning=FALSE}
+(body_counts_df <- read_bedgraph_sums(path, file_list, sfx))
+```
+
+
+#### combine body and end 
+
+```{r}
+(raw_counts_df <- bind_rows(mutate(body_counts_df, part = 'body'), 
+                     mutate(end_counts_df, part = 'end')) %>%
+   mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
+                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
+                         TRUE ~ '??')))
+```
+
+
+```{r}
+save(raw_counts_df, file='data/raw_signal_body_end_all.RData')
+```
+
+
+## Sp-normalized counts
+
 #### load and combine end counts
 ```{r}
 path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
@@ -410,9 +506,58 @@ save(both_df, file='data/norm_signal_body_end_raw_all.RData')
 ```
 
 
+## Sanity check S.pombe normalization
+
+simply checks that $SpombeNormCounts = RawCounts / SpombeSizeFactor$  
+
+#### Load the S.pombe size factors
+```{r}
+(sf <- read.table('data/Sp_genes_sf.txt', col.names=c('condition', 'sf')) %>%
+  tbl_df)
+```
+
+
+#### check it
+```{r}
+(raw_vs_norm <- left_join(raw_counts_df %>%
+  dplyr::rename(raw_reads = sum),
+  sf) %>%
+  left_join(., both_df %>%
+  dplyr::rename(norm_reads = sum)))
+```
+
+
+```{r}
+filter(raw_vs_norm, norm_reads != raw_reads/sf)
+```
+
+apparently its not exactly the same values, probably rounding makes the difference ....
+
+```{r}
+mutate(raw_vs_norm, re_norm_reads = raw_reads/sf) %>%
+  group_by(condition, part) %>%
+  do(tidy(cor(.$norm_reads, .$re_norm_reads))) %>%
+  kable
+```
+
+seems to be perfectly correlated.  
+
+
+```{r}
+mutate(raw_vs_norm, rel_diff = (norm_reads - (raw_reads/sf))/norm_reads) %>%
+  group_by(condition, part) %>%
+  do(tidy(summary(.$rel_diff))) %>%
+  kable
+```
+
+-> can see that maximum relative difference at a single feature between norm and recomputed normalized is around 3E-6, ie 3 in a million, aka .0003%.
+-> its roughly stable between all libraries so appears to be a rounding thingy
+
+
+
 ## Sanity check BGsub and pA minus method
 
-simply check that 
+simply checks that 
 1. norm. counts for $BGsub = normIP  -  normnegativeIP$  
 2. norm. counts for $pAminus = pAplusandminus  -  pAplus$  
 

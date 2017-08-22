@@ -124,6 +124,8 @@ note this was a mistake already realized during pipetting, ie only for sample xP
 
 ```{r}
 Sp_genes_sf['xPap_Nab2AA_ip_0_1'] <- Sp_genes_sf['xPap_Nab2AA_ip_0_1']/3
+
+data.frame(Sp_genes_sf)
 ```
 
 

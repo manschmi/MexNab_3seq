@@ -1,0 +1,65 @@
+---
+title: "Violins body and end per biotype"
+author: "Manfred Schmid"
+date: "9 August 2017"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_violins_body_and_end_by_biotype/', dev='pdf')
+```
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+```
+
+
+### load the counts
+
+-> from script body_end_counting.Rmd  
+-> her we only look at length-normalized BGsub data
+```{r}
+load('data/norm_signal_body_end_pA+_pA-_BGsub.RData', verbose=TRUE)
+
+both_df
+```
+
+
+#### violin plot fun
+```{r}
+violin_plot <- function(df) {
+  ggplot(df, aes(x=type, y=scaled_reads, fill=type)) +
+  geom_violin() +
+  geom_boxplot(fill='gray', width=.2, outlier.shape = NA) +
+  facet_grid(fraction~part+pA+strain+rep) +
+  scale_y_log10() +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust=1, angle=45))
+}
+```
+
+
+# Violin plots
+
+```{r violins all at once}
+violin_plot(both_df)
+```
+
+
+```{r violins rapa0 rep1}
+both_df %>%
+  filter(rep == 1, rapa == 0, type != 'other', pA != 'pA+ + pA-') %>%
+  violin_plot(.)
+```
+
+
+```{r}
+sessionInfo()
+```
+
+
+

@@ -69,10 +69,14 @@ head -3 ${bed/.bed/_ends_pm200_minus.bed}
 #chrI    4876    5276    ST3634
 #chrI    7077    7477    ST3635
 #chrI    10533   10933   ST3636
+```
 
 
+Original Steinmetz annotations never overlap on the same strand. Here I extend the ends by 200bp so overlaps are likely to occur. Since gene end reads dominate in those libraries, we don't want to count overlapping "gene end" regions as "gene body." Hence we remove all ends+/-200bp covered regions from gene body regions.  
 
-##inspect the overlaps
+
+First inspect the overlaps:  
+```{bash, eval = FALSE}
 bedtools intersect -wo -a ${bed/.bed/_body_endsm200_plus.bed} -b ${bed/.bed/_ends_pm200_plus.bed} > body_vs_end_intersect_plus.txt
 bedtools intersect -wo -a ${bed/.bed/_body_endsm200_minus.bed} -b ${bed/.bed/_ends_pm200_minus.bed} > body_vs_end_intersect_minus.txt
 
@@ -110,14 +114,15 @@ wc -l ${bed/.bed/_body_endsm200_plus.bed}
 #    3381 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_plus.bed
 wc -l ${bed/.bed/_body_endsm200_minus.bed}
 #    3385 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_minus.bed
-
-##roughly 1/3 of all body regions have overlapping end regions!
-
+```
 
 
+--> roughly 1/3 of all body regions have overlapping end regions!  
 
-##filter out ends_pm200 from body annotations
+#### filter out ends_pm200 from body annotations:  
+```{bash, eval = FALSE}
 bedtools subtract -a ${bed/.bed/_body_endsm200_plus.bed} -b ${bed/.bed/_ends_pm200_plus.bed} > ${bed/.bed/_body_endsm200_cleaned_plus.bed}
+
 bedtools subtract -a ${bed/.bed/_body_endsm200_minus.bed} -b ${bed/.bed/_ends_pm200_minus.bed} > ${bed/.bed/_body_endsm200_cleaned_minus.bed}
 
 #sanity check
@@ -142,9 +147,12 @@ grep ST0006 ${bed/.bed/_body_endsm200_cleaned_plus.bed}
 #chrI    34181   34581   ST3641
 ##cleaned_body:
 #chrI    33277   34181   ST3640
+```
 
 
+#### inspection of the cleaned annotation
 
+```{bash, eval = FALSE}
 wc -l ${bed/.bed/_body_endsm200_cleaned_plus.bed}
 #    3359 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed
 wc -l ${bed/.bed/_body_endsm200_cleaned_minus.bed}
@@ -159,18 +167,23 @@ cat ${bed/.bed/_body_endsm200_minus.bed} | awk '{sum+=($3-$2)}END{print sum}'
 #4717054
 cat ${bed/.bed/_body_endsm200_cleaned_minus.bed} | awk '{sum+=($3-$2)}END{print sum}'
 #4592248
-##lost taken some 200000 bp of body annotations by this overlap cleaning
+```
+--> lost taken some 200000 bp of body annotations by this overlap cleaning.  
 
 
-##how many body regions are "split apart" ?
+#### how many body regions are "split apart" ?
+```{bash, eval = FALSE}
 cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed | cut -f 4 | uniq -c | grep -v "  1"
 ##no output, ie 0
 cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed | cut -f 4 | uniq -c | grep -v "  1"
 ##no output ie 0
-### this may at least have happened some times
-### explanation is the Steinmetz annotations are NEVER overlapping on the same strand...
+```
+--> none!  
+This may at least have happened some times, but explanation is the Steinmetz annotations are NEVER overlapping on the same strand... if an end region is overlapping due to 200bp extension, its only overlapping at one edge and never internally.
 
 
+final sorting:  
+```{bash, eval = FALSE}
 body_plus_bed=${bed/.bed/_body_endsm200_cleaned_plus.bed}
 body_minus_bed=${bed/.bed/_body_endsm200_cleaned_minus.bed}
 ends_plus_bed=${bed/.bed/_ends_pm200_plus.bed}
@@ -185,23 +198,65 @@ sort -k1,1 -k2,2n ${ends_minus_bed} -o ${ends_minus_bed}
 
 
 
-### body size taking genomic pA mask into account
+#### number of genomic pA masked sites in each body and end region
+Using this little script *bed_count_positions.sh*:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+# counts the total number of bases that are covered in file $2 for each interval in file $1
+# and uses bedtools intersect and a awk script to sum up adding the sum at the end
+# note expects a 4-column bed file for file $1
+# output goes to file $3
+#ie line from file $2:
+#   chrI 10 12
+# and for an interval in $1
+#   chrI 5 20 id . +
+# will give chrI 5 20 id 2
+
+bedtools intersect -wao -a $1 -b $2 | \
+awk '{
+  if($4==id){
+    sum+=$8
+  }else{
+    print chr"\t"start"\t"end"\t"id"\t"sum;
+    chr=$1; start=$2; end=$3; id=$4; sum=$8
+  }
+}END{
+  print chr"\t"start"\t"end"\t"id"\t"sum
+}' | sed 1d > $3
+```
+
 ```{bash, eval = FALSE}
 body_plus_bed=${bed/.bed/_body_endsm200_cleaned_plus.bed}
 body_minus_bed=${bed/.bed/_body_endsm200_cleaned_minus.bed}
 ends_plus_bed=${bed/.bed/_ends_pm200_plus.bed}
 ends_minus_bed=${bed/.bed/_ends_pm200_minus.bed}
 
-## effective gene body region size using cleaned body annotations of pA filtered tracks...
+## count of genomic A-masked sites per annotation
 pA_sites_plus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus.bed"
 pA_sites_minus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_minus.bed"
-sort -k1,1 -k2,2n ${pA_sites_plus} -o ${pA_sites_plus}
-sort -k1,1 -k2,2n ${pA_sites_minus} -o ${pA_sites_minus}
+grep ^chr ${pA_sites_plus} | sort -k1,1 -k2,2n > ${pA_sites_plus/.bed/_Sc.bed}
+grep ^chr ${pA_sites_minus} | sort -k1,1 -k2,2n > ${pA_sites_minus/.bed/_Sc.bed}
 
-bedtools map -a ${body_plus_bed} -b ${pA_sites_plus} -c 2 -o count > ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts}
-bedtools map -a ${body_minus_bed} -b ${pA_sites_minus} -c 2 -o count > ${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts}
 
-cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/*_pAfilter.counts > /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts
+## count of genomic A-masked sites for cleaned gene body regions
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${body_plus_bed} ${pA_sites_plus/.bed/_Sc.bed} ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts}
+
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${body_minus_bed} ${pA_sites_minus/.bed/_Sc.bed} ${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts}
+
+cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/*_body_endsm200*_pAfilter.counts > /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts
+
+
+## count of genomic A-masked sites for effective gene end regions
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${ends_plus_bed} ${pA_sites_plus/.bed/_Sc.bed} ${ends_plus_bed/_plus.bed/_plus_pAfilter.counts}
+
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${ends_minus_bed} ${pA_sites_minus/.bed/_Sc.bed} ${ends_minus_bed/_minus.bed/_minus_pAfilter.counts}
+
+cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/*ends_pm200*_pAfilter.counts > /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts
 ```
 
 
@@ -611,16 +666,16 @@ BGsub_comparison %>%
 ## work only with BGsub IPs
 
 ```{r}
-both_df %<>% 
+(both_df %<>% 
   separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
   filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
-  dplyr::select(-BGsub)
+  dplyr::select(-BGsub))
 ```
 
 
-## Normalize body reads to body length
+## Normalize reads to region length and correct for genomic A masked positions
 
-Annotations for correction to body length …
+#### Original plain annotations
 ```{r}
 (anno <- read.table("/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3.bed", col.names = c('chr', 'start', 'end', 'id', 'name', 'strand', 'type', 'common_name')) %>%
   tbl_df %>% 
@@ -628,28 +683,48 @@ Annotations for correction to body length …
          type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'snRNA', 'other'))))
 ```
 
-body regions stripped for overlapping ends and content of masked genomic pA in this region
+
+
+#### cleaned region lengths and A-masked positions
+
+Note: for body regions stripped for overlapping ends, end regions are all 400bp. This info is contained in the A-mask count files.
+
+A-masked positions: nothing will ever be counted from those positions, so in practice these positions do not count to the length of each region -> subtract them:  
 ```{r}
-(effective_body_and_genomic_pA_counts <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/genomic_pA_per_cleaned_body.txt', col.names=c('chr', 'start', 'end', 'id', 'pAfilter_count'), stringsAsFactors = FALSE) %>%
-   mutate(pAfilter_count = ifelse(pAfilter_count == '.', 0, as.integer(pAfilter_count)),
-          body_len = end-start,
-          pAfiltered_cleaned_body_len = body_len - pAfilter_count) %>%
-   dplyr::select(-chr,-start, -end) %>%
-   tbl_df)
+(effective_body_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'id', 'body_pA_masked')) %>%
+   tbl_df %>%
+   mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
+```
+
+```{r}
+(effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'id', 'end_pA_masked')) %>%
+   tbl_df %>%
+   mutate(pAfiltered_end_len = end - start - end_pA_masked))
 ```
 
 
+
+#### combine all of the above
+
 ```{r}
-(anno <- left_join(anno, effective_body_and_genomic_pA_counts))
+(effective_lens <- left_join(
+  dplyr::select(effective_body_len, id, pAfiltered_cleaned_body_len),
+  dplyr::select(effective_end_len, id, pAfiltered_end_len))
+  )
 ```
+
+Final annotations, containing that info:  
+```{r}
+(anno <- left_join(anno, effective_lens))
+```
+
 
 ```{r}
 (both_df %<>% 
   dplyr::select(id, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
   left_join(., anno) %>%
-  mutate(scaled_reads = ifelse(part == 'body',
-                               sum/pAfiltered_cleaned_body_len,
-                               sum)) %>%
+  mutate(scaled_reads = case_when(.$part == 'body' ~ sum/pAfiltered_cleaned_body_len,
+                               .$part == 'end' ~ sum/pAfiltered_end_len)) %>%
   dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
 ```
 
@@ -660,26 +735,20 @@ body regions stripped for overlapping ends and content of masked genomic pA in t
 -> sanity check all with pAfiltered_cleaned_body_len == NA should never have counts
 
 ```{r}
-body_len_NA_ids <- filter(anno, is.na(pAfiltered_cleaned_body_len)) %$% id %>% unique
+body_len_NA_ids <- filter(anno, is.na(pAfiltered_cleaned_body_len)) %>% distinct(id, common_name, type)
+
+table(body_len_NA_ids$type)
 ```
 
-```{r}
-length(body_len_NA_ids)
-```
-actually quite a few transciption units have this
-
-```{r}
-table(anno$type[anno$id %in% body_len_NA_ids])
-```
 mostly CUTs, many SUTs, some snRNAs very few ORFs.  
 
 
 ```{r}
-filter(both_df, part == 'body', id %in% body_len_NA_ids)
+filter(both_df, part == 'body', id %in% body_len_NA_ids$id)
 ```
 
 ```{r}
-filter(both_df, part == 'end', id %in% body_len_NA_ids)
+filter(both_df, part == 'end', id %in% body_len_NA_ids$id)
 ```
 
 

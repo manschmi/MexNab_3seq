@@ -34,7 +34,7 @@ violin_plot <- function(df) {
   ggplot(df, aes(x=type, y=scaled_reads, fill=type)) +
   geom_violin() +
   geom_boxplot(fill='gray', width=.2, outlier.shape = NA) +
-  facet_grid(fraction~part+pA+strain+rep) +
+  facet_grid(part~fraction+pA+strain+rep, scales='free') +
   scale_y_log10() +
   scale_fill_brewer(palette = 'Set1') +
   theme_bw() +
@@ -53,6 +53,18 @@ violin_plot(both_df)
 ```{r violins rapa0 rep1}
 both_df %>%
   filter(rep == 1, rapa == 0, type != 'other', pA != 'pA+ + pA-') %>%
+  violin_plot(.)
+```
+
+```{r violins rapa0 rep1 body}
+both_df %>%
+  filter(rep == 1, rapa == 0, part == 'body', type != 'other', pA != 'pA+ + pA-') %>%
+  violin_plot(.)
+```
+
+```{r violins rapa0 rep1 ends}
+both_df %>%
+  filter(rep == 1, rapa == 0, part == 'end', type != 'other', pA != 'pA+ + pA-') %>%
   violin_plot(.)
 ```
 

@@ -1,0 +1,801 @@
+---
+title: 'Published txn estimates, counts per gene body'
+author: "Manfred Schmid"
+output: html_document
+---
+
+```{r, echo=TRUE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_published_txn_estimates_gene_body_counting/'), 
+                      dev='pdf', echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(knitr))
+```
+
+
+## NETseq
+
+#### counted using bwtool
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+
+bwtool summary -keep-bed -header -with-sum $body_plus_bed GSM617027_WT_NC_plus_sacCer3.bw GSM617027_WT_NC_plus_sacCer3.sums
+
+bwtool summary -keep-bed -header -with-sum $body_minus_bed GSM617027_WT_NC_minus_sacCer3.bw GSM617027_WT_NC_minus_sacCer3.sums
+
+cat GSM617027_WT_NC_plus_sacCer3.sums GSM617027_WT_NC_minus_sacCer3.sums > GSM617027_WT_NC_body_endsm200_cleaned.sums
+
+
+rm GSM617027_WT_NC_plus_sacCer3.sums
+rm GSM617027_WT_NC_minus_sacCer3.sums
+```
+
+### load into R
+```{r, warning=FALSE, message=FALSE}
+(netseq_body_sums <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/GSM617027_WT_NC_body_endsm200_cleaned.sums'))
+```
+
+
+```{r}
+netseq_body_sums$true_mean <- netseq_body_sums$sum/netseq_body_sums$size
+plot(mean~true_mean, data=netseq_body_sums, log='xy')
+```
+
+
+
+#### counted using deeptools
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+
+computeMatrix scale-regions \
+-R $body_plus_bed -S GSM617027_WT_NC_plus_sacCer3.bw \
+-b 0 -a 0 --binSize 100 --regionBodyLength=100 --averageTypeBins=sum \
+-out GSM617027_WT_NC_plus_deeptools_body_1bin.gz
+
+computeMatrix scale-regions \
+-R $body_minus_bed -S GSM617027_WT_NC_minus_sacCer3.bw \
+-b 0 -a 0 --binSize 100 --regionBodyLength=100 --averageTypeBins=sum \
+-out GSM617027_WT_NC_minus_deeptools_body_1bin.gz
+
+gunzip GSM617027_WT_NC_plus_deeptools_body_1bin.gz
+gunzip GSM617027_WT_NC_minus_deeptools_body_1bin.gz
+
+sed 1d GSM617027_WT_NC_minus_deeptools_body_1bin | \
+cat GSM617027_WT_NC_plus_deeptools_body_1bin - | \
+sed 1d > GSM617027_WT_NC_plus_deeptools_body_1bin.counts
+
+rm GSM617027_WT_NC_plus_deeptools_body_1bin GSM617027_WT_NC_minus_deeptools_body_1bin
+```
+
+### load into R
+```{r, warning=FALSE, message=FALSE}
+(netseq_body_sums2 <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/GSM617027_WT_NC_plus_deeptools_body_1bin.counts', col_names = c('chr', 'start', 'end', 'id', 'pad1', 'pad2', 'deeptools_sum')))
+```
+
+compare to bwtool
+```{r}
+left_join(netseq_body_sums, netseq_body_sums2) %>%
+  ggplot(., aes(x=sum, y=deeptools_sum)) +
+  geom_point() +
+  scale_x_log10() + scale_y_log10()
+```
+
+exactly the same but also deeptools seems to ignore positions without count when computing the mean, so best to use the true mean....
+
+
+```{r}
+(netseq_body_means <- netseq_body_sums %>%
+  dplyr::rename(id=name, NETseq_mean_signal = true_mean) %>%
+  dplyr::select(id, NETseq_mean_signal))
+```
+
+```{r}
+save(netseq_body_means, file='data/NETseq_body_mean.RData')
+```
+
+
+
+
+## CRAC Milligan
+
+#### counted using bwtool
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC
+
+### count up using bwtool
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+
+bwtool summary -keep-bed -header -with-sum $body_plus_bed GSM1706520_Rpo21_nabFT_plus.bw GSM1706520_Rpo21_nabFT_plus.sums
+bwtool summary -keep-bed -header -with-sum $body_minus_bed GSM1706520_Rpo21_nabFT_minus.bw GSM1706520_Rpo21_nabFT_minus.sums
+
+bwtool summary -keep-bed -header -with-sum $body_plus_bed GSM1706521_Rpo21-2_nabFT_plus.bw GSM1706521_Rpo21-2_nabFT_plus.sums
+bwtool summary -keep-bed -header -with-sum $body_minus_bed GSM1706521_Rpo21-2_nabFT_minus.bw GSM1706521_Rpo21-2_nabFT_minus.sums
+
+
+cat GSM1706520_Rpo21_nabFT_plus.sums GSM1706520_Rpo21_nabFT_minus.sums > GSM1706520_Rpo21_nabFT_body_endsm200_cleaned.sums
+cat GSM1706521_Rpo21-2_nabFT_plus.sums GSM1706521_Rpo21-2_nabFT_minus.sums > GSM1706521-2_Rpo21_nabFT_body_endsm200_cleaned.sums
+
+rm GSM1706520_Rpo21_nabFT_plus.sums
+rm GSM1706520_Rpo21_nabFT_minus.sums
+rm GSM1706521_Rpo21-2_nabFT_plus.sums
+rm GSM1706521_Rpo21-2_nabFT_minus.sums
+```
+
+### load into R
+```{r, warning=FALSE, message=FALSE}
+(crac_body_sums <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/GSM1706520_Rpo21_nabFT_body_endsm200_cleaned.sums'))
+```
+
+
+```{r}
+crac_body_sums$true_mean <- crac_body_sums$sum/crac_body_sums$size
+plot(mean~true_mean, data=crac_body_sums, log='xy')
+```
+
+
+
+#### counted using deeptools
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC
+
+### count up using deeptools
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+computeMatrix scale-regions \
+-R $body_plus_bed -S GSM1706520_Rpo21_nabFT_plus.bw \
+-b 0 -a 0 --binSize 100 --regionBodyLength=100 --averageTypeBins=sum \
+-out GSM1706520_Rpo21_nabFT_plus_deeptools_body_1bin.gz
+
+computeMatrix scale-regions \
+-R $body_minus_bed -S GSM1706520_Rpo21_nabFT_minus.bw \
+-b 0 -a 0 --binSize 100 --regionBodyLength=100 --averageTypeBins=sum \
+-out GSM1706520_Rpo21_nabFT_minus_deeptools_body_1bin.gz
+
+gunzip GSM1706520_Rpo21_nabFT_plus_deeptools_body_1bin.gz
+gunzip GSM1706520_Rpo21_nabFT_minus_deeptools_body_1bin.gz
+
+sed 1d GSM1706520_Rpo21_nabFT_minus_deeptools_body_1bin | \
+cat GSM1706520_Rpo21_nabFT_plus_deeptools_body_1bin - | \
+sed 1d > GSM1706520_Rpo21_nabFT_deeptools_body_1bin.counts
+
+rm GSM1706520_Rpo21_nabFT_plus_deeptools_body_1bin
+rm GSM1706520_Rpo21_nabFT_minus_deeptools_body_1bin
+```
+
+### load into R
+```{r, warning=FALSE, message=FALSE}
+(crac_body_sums2 <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/GSM1706520_Rpo21_nabFT_deeptools_body_1bin.counts', col_names = c('chr', 'start', 'end', 'id', 'pad1', 'pad2', 'deeptools_sum')))
+```
+
+compare to bwtool
+```{r}
+left_join(crac_body_sums, crac_body_sums2) %>%
+  ggplot(., aes(x=sum, y=deeptools_sum)) +
+  geom_point() +
+  scale_x_log10() + scale_y_log10()
+```
+
+exactly the same but also deeptools seems to ignore positions without count when computing the mean, so best to use the true mean....
+
+
+```{r}
+(crac_body_means <- crac_body_sums %>%
+  dplyr::rename(id=name, CRAC_mean_signal = true_mean) %>%
+  dplyr::select(id, CRAC_mean_signal))
+```
+
+```{r}
+save(crac_body_means, file='data/CRAC_body_mean.RData')
+```
+
+
+#### counted using awk + bedtools
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC
+
+### count up using bash script using awk + bedtools
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+### count up genes using bedtools --> should be correct ####
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+sort -k1,1 -k2,2n GSM1706520_Rpo21_nabFT_plus.bed -o GSM1706520_Rpo21_nabFT_plus.bed
+sort -k1,1 -k2,2n GSM1706520_Rpo21_nabFT_minus.bed -o GSM1706520_Rpo21_nabFT_minus.bed
+sort -k1,1 -k2,2n GSM1706521_Rpo21-2_nabFT_plus.bed -o GSM1706521_Rpo21-2_nabFT_plus.bed
+sort -k1,1 -k2,2n GSM1706521_Rpo21-2_nabFT_minus.bed -o GSM1706521_Rpo21-2_nabFT_minus.bed
+
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh ${body_plus_bed} GSM1706520_Rpo21_nabFT_plus.bed 4 GSM1706520_Rpo21_nabFT_plus.bed_counts
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh ${body_minus_bed} GSM1706520_Rpo21_nabFT_minus.bed 4 GSM1706520_Rpo21_nabFT_minus.bed_counts
+
+cat GSM1706520_Rpo21_nabFT_plus.bed_counts GSM1706520_Rpo21_nabFT_minus.bed_counts > GSM1706520_Rpo21_nabFT.bed_counts
+rm GSM1706520_Rpo21_nabFT_plus.bed_counts
+rm GSM1706520_Rpo21_nabFT_minus.bed_counts
+```
+
+### load into R
+```{r, warning=FALSE, message=FALSE}
+(crac_body_sums3 <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/GSM1706520_Rpo21_nabFT.bed_counts', col_names = c('#chrom', 'start', 'end', 'name', 'bash_sum')))
+```
+
+compare to bwtool
+```{r}
+left_join(crac_body_sums, crac_body_sums3) %>%
+  ggplot(., aes(x=sum, y=as.numeric(bash_sum))) +
+  geom_point() +
+  scale_x_log10() + scale_y_log10()
+```
+
+-> exactly same so all these tools count the same sum, but the mean is not simply sum/length, but sum/covered bases !?? 
+
+
+
+## compare CRAC and NETseq
+
+```{r CRAC vs NETseq scatter}
+left_join(netseq_body_means, crac_body_means) %>%
+  ggplot(., aes(x=CRAC_mean_signal, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+```{r}
+left_join(netseq_body_means, crac_body_means) %>%
+  do(tidy(cor.test(log2(.$CRAC_mean_signal), log2(.$NETseq_mean_signal), use='pairwise.complete')))
+```
+
+
+
+## Pelechano Perez-Ortin transcription rates
+
+We are taking supplementary data table 1from Pelechano, Chavez and Perez-Ortin from PLOS one, 2010 vol5, issue11 e15442+.  
+```{r}
+(pelechano_rates <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/halflife_and_transcription_rates/Transcription_Pelechano_PerezOrtin/Pelechano_PerezOrtin_TR_rates2.txt'))
+```
+
+this is a bit more tricky as they operate with SGD names and not Steinmetz ids ...
+
+```{r}
+(anno <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_annotations_sacCer3_latin_ORFs.bed', col_names = c('chr', 'start', 'end', 'common_name', 'name', 'strand', 'type', 'id')))
+```
+
+
+```{r}
+pelechano_rates %<>%
+  dplyr::rename(name = `Systematic name`,
+                common_name = `Gene name`,
+                RNAPII_density = `RNA pol II density (per kb)`) %>%
+  mutate(RNAPII_density = as.numeric(sub(',', '.', RNAPII_density))) %>%
+  left_join(., anno) %>%
+  dplyr::select(id, RNAPII_density)
+```
+
+
+```{r NETseq vs Pelechano rates}
+left_join(netseq_body_means, pelechano_rates) %>%
+  ggplot(., aes(x=RNAPII_density, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r}
+left_join(netseq_body_means, pelechano_rates) %>%
+  do(tidy(cor.test(log2(.$RNAPII_density), log2(.$NETseq_mean_signal), use='pairwise.complete')))
+```
+
+
+
+```{r CRAC vs Pelechano rates}
+left_join(crac_body_means, pelechano_rates) %>%
+  ggplot(., aes(x=RNAPII_density, y=CRAC_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r}
+left_join(crac_body_means, pelechano_rates) %>%
+  do(tidy(cor.test(log2(.$RNAPII_density), log2(.$CRAC_mean_signal), use='pairwise.complete')))
+```
+
+
+
+## Cramer Rpb3 chip-on-chip
+
+We are taking data from Cramer labs Rpb3 chip on chip from ArrayExpress E-TABM-1033.  
+
+Raw file is a wig file, but intervals are overlapping, and its based on sacCer2 so takes a bit of pre-processing.  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+
+## file Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig is downloaded from ArrayExpress E-TABM-1033
+## this is Steinmetz tiling array format
+
+
+head Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig
+#track type=wiggle_0 name=Rpb3_InputAndMockNormalized
+#variableStep chrom=chrV span=25
+#1 0.108703797559
+#5 0.109159129901
+#9 0.108703797559
+#13 0.109159129901
+#17 0.108703797559
+#21 0.109159129901
+#25 0.109614462242
+#29 0.112107222775
+
+##largest position on each chromosome...
+awk '{
+  if($1 ~/^variableStep/ ){
+    print max_pos
+    print $0
+    max_pos=0
+  }else{
+    max_pos=$1
+  }
+}END{
+  print max_pos
+}' Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig | \
+sed 1d | paste - - | \
+sed s/"variableStep "//g | sed s/span=25//g | sed s/chrom=//g | sort -k1,1
+#chrI    230187
+#chrII   813156
+#chrIII  316590
+#chrIV   1531896
+#chrIX   439861
+#chrV    576846
+#chrVI   270125
+#chrVII  1090919
+#chrVIII         562616
+#chrX    745646
+#chrXI   666426
+#chrXII  1078148
+#chrXIII         924405
+#chrXIV  784312
+#chrXV   1091263
+#chrXVI  948039
+#
+#chr		sacCer1	sacCer2	sacCer3	##found max position(-25) on tiling wig data
+#chr01	230208	230208	230218	##230187
+#chr02	813136	813178	813184	##813156
+#chr03	316613	316617	316620	##316590
+#chr04	1531914	1531919	1531933	##1531896
+#chr05	576869	576869	576874	##576846
+#chr06	270148	270148	270161	##270125
+#chr07	1090944	1090947	1090940	##1090919
+#chr08	562639	562643	562643	##562616
+#chr09	439885	439885	439888	##439861
+#chr10	745446	745742	745751	##745646 -->!!
+#chr11	666445	666454	666816	##666426
+#chr12	1078173	1078175	1078177	##1078148
+#chr13	924430	924429	924431	##924405
+#chr14	784328	784333	784333	##784312
+#chr15	1091285	1091289	1091291	##1091263
+#chr16	948060	948062	948066	##948039
+#chr17	85779	85779	85779
+
+
+##genome version closely related to sacCer2
+## lift to sacCer3
+##UCSC sacCer2 = S288C_reference_genome_R61-1-1_20080605.tgz
+##UCSC sacCer3 = S288C_reference_genome_R64-1-1_20110203.tgz
+
+
+/Users/schmidm/ms_tools/wigToBigWig -clip Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer2/sacCer2_genome_latin.info Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.bw
+
+
+
+## for liftOver the chain file for sacCer2 to sacCer3 is :
+### V61_2008_06_05_V64_2011_02_03.over.chain
+cat /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer2/V61_2008_06_05_V64_2011_02_03.over.chain | sed 's/_...._.._.. / /g' > V61_2008_06_05_V64_2011_02_03_plain.over.chain
+
+#dummy command ./liftOver anno.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain converted.bed conversion_failed.bed
+
+f="Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig"
+
+cat $f | \
+grep -v ^track | \
+awk '{
+  if($1=="variableStep"){
+    if(chr!=""){
+      for(i=1;i<=max_pos;i++){
+        if(n[i]>0){
+          print chr"\t"i-1"\t"i"\t"ar[i]/n[i]
+        }
+        ar[i]=0
+        n[i]=0
+      }
+    }
+    chr=$2;
+    sub("chrom=","",chr);
+    span=$3;
+    sub("span=","",span);
+  }else{
+    max_pos=$1+span
+    for(i=$1;i<=($1+span);i++){
+      n[i]+=1
+      ar[i]+=$2
+    }
+  }
+}END{
+  for(i=1;i<=max_pos;i++){
+    if(n[i]>0){
+      print chr"\t"i-1"\t"i"\t"ar[i]/n[i]
+    }
+  }
+}' > ${f/.wig/.bedGraph}
+
+python ~/ms_tools/convert_chr_names2.py ${f/.wig/.bedGraph} -f latin -t roman0 > roman.bedGraph
+
+/Users/schmidm/Documents/genomewide_datasets/scripts/liftOver_and_conversionTools/liftOver roman.bedGraph V61_2008_06_05_V64_2011_02_03_plain.over.chain roman_converted.bed conversion_failed.bed
+
+python ~/ms_tools/convert_chr_names2.py roman_converted.bed -f roman0 -t latin > ${f/.wig/_sacCer3.bedGraph}
+
+sort -k1,1 -k2,2n ${f/.wig/_sacCer3.bedGraph} -o ${f/.wig/_sacCer3.bedGraph}
+
+/Users/schmidm/ms_tools/bedGraphToBigWig ${f/.wig/_sacCer3.bedGraph} /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info ${f/.wig/_sacCer3.bw}
+
+rm Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized_sacCer3.bedGraph
+rm Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.bedGraph
+rm roman*
+
+```
+
+
+to make the metagene values:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+bw="Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized_sacCer3.bw"
+bwtool summary -keep-bed -header -with-sum $body_plus_bed $bw $bw"plus.sums"
+bwtool summary -keep-bed -header -with-sum $body_minus_bed $bw $bw"minus.sums"
+
+cat $bw"plus.sums" $bw"minus.sums" > ${bw/.bw/_body_endsm200_cleaned.sums}
+rm $bw"plus.sums"
+rm $bw"minus.sums"
+```
+
+
+#### load
+```{r}
+(rpb3_chip2 <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip/Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized_sacCer3_body_endsm200_cleaned.sums'))
+```
+
+```{r}
+(rpb3_chip2 %<>%
+  mutate(rpb3_chip2_mean = sum/size) %>%
+  dplyr::rename(id=name, rpb3_chip2_median=median) %>%
+  dplyr::select(id, rpb3_chip2_mean, rpb3_chip2_median))
+```
+
+```{r Rpb3 chip2 median vs mean}
+ggplot(rpb3_chip2, aes(x=rpb3_chip2_median, y=rpb3_chip2_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+```{r NETseq vs Rpb3 chip2 mean}
+left_join(netseq_body_means, rpb3_chip2) %>%
+  ggplot(., aes(x=rpb3_chip2_mean, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r NETseq vs Rpb3 chip2 median}
+left_join(netseq_body_means, rpb3_chip2) %>%
+  ggplot(., aes(x=rpb3_chip2_median, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r}
+left_join(netseq_body_means, rpb3_chip2) %>%
+  do(tidy(cor.test(log2(.$rpb3_chip2_mean), log2(.$NETseq_mean_signal), use='pairwise.complete')))
+```
+
+
+```{r}
+left_join(netseq_body_means, rpb3_chip2) %>%
+  filter(rpb3_chip2_median > 0) %>%
+  do(tidy(cor.test(log2(.$rpb3_chip2_median), log2(.$NETseq_mean_signal), use='complete', na.action='omit')))
+```
+
+
+## Henikoff Rpb3-FLAG ChIPseq
+
+We are taking data from Henikoffs lab ChIPseq for Rpb3 sample GSM2551210 from GSE97081.  
+
+Raw file is a wig file mapped to sacCer3, though some intervals exceeding right end of each chromosome afaics. Did not investigate this further and used data as-is.  
+Processing:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+
+## -> mapped to sacCer3, mentioned specifically at GEO
+## data is coverage normalized to S.pombe spike-ins
+
+awk '{
+  if($1 ~/^variableStep/ ){
+    print max_pos
+    print $0
+    max_pos=0
+  }else{
+    max_pos=$1
+  }
+}END{
+  print max_pos
+}' GSM2551210_WT_A_140.wig | \
+sed 1d | paste - - | \
+sed s/"variableStep "//g | sed s/span=1//g | sed s/chrom=//g | sort -k1,1
+
+# chrI   230217
+# chrII  813185
+# chrIII         316616
+# chrIV  1531912
+# chrIX  439889
+# chrM   85780
+# chrV   576871
+# chrVI  270162
+# chrVII         1090936
+# chrVIII        562650
+# chrX   745754
+# chrXI  666817
+# chrXII         1078177
+# chrXIII        924431
+# chrXIV         784338
+# chrXV  1091298
+# chrXVI         948062
+
+
+## only cerevisiae chromosomes in this file
+/Users/schmidm/ms_tools/wigToBigWig GSM2551210_WT_A_140.wig /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info GSM2551210_WT_A_140.bw
+## complains, look like wig file contains entries off chromosome end, just a few nts but still !!
+
+## also chrM not found in genome
+## -> fix this
+
+
+cat /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info | sed s/Mito/chrM/g > sacCer3_genome.info
+
+
+/Users/schmidm/ms_tools/wigToBigWig -clip GSM2551210_WT_A_140.wig sacCer3_genome.info GSM2551210_WT_A_140.bw
+#line 1959084 of GSM2551210_WT_A_140.wig: chromosome chrIX has 439888 bases, but item ends at 439889
+#line 3047743 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784334
+#line 3047744 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784335
+#line 3047745 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784336
+#line 3047746 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784337
+#line 3047747 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784338
+#line 4201663 of GSM2551210_WT_A_140.wig: chromosome chrM has 85779 bases, but item ends at 85780
+#line 5166715 of GSM2551210_WT_A_140.wig: chromosome chrX has 745751 bases, but item ends at 745752
+#line 5166716 of GSM2551210_WT_A_140.wig: chromosome chrX has 745751 bases, but item ends at 745753
+#line 5166717 of GSM2551210_WT_A_140.wig: chromosome chrX has 745751 bases, but item ends at 745754
+#line 8110064 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091292
+#line 8110065 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091293
+#line 8110066 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091294
+#line 8110067 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091295
+#line 8110068 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091296
+#line 8110069 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091297
+#line 8110070 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091298
+#line 8669012 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562644
+#line 8669013 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562645
+#line 8669014 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562646
+#line 8669015 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562647
+#line 8669016 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562648
+#line 8669017 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562649
+#line 8669018 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562650
+#line 8934728 of GSM2551210_WT_A_140.wig: chromosome chrVI has 270161 bases, but item ends at 270162
+#line 9597240 of GSM2551210_WT_A_140.wig: chromosome chrXI has 666816 bases, but item ends at 666817
+#line 10400860 of GSM2551210_WT_A_140.wig: chromosome chrII has 813184 bases, but item ends at 813185
+
+```
+
+
+
+to make the metagene values:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+bw="GSM2551210_WT_A_140.bw"
+bwtool summary -keep-bed -header -with-sum $body_plus_bed $bw $bw"plus.sums"
+bwtool summary -keep-bed -header -with-sum $body_minus_bed $bw $bw"minus.sums"
+
+cat $bw"plus.sums" $bw"minus.sums" > ${bw/.bw/_body_endsm200_cleaned.sums}
+rm $bw"plus.sums"
+rm $bw"minus.sums"
+```
+
+
+#### load
+```{r}
+(rpb3_ChIPseq <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq/GSM2551210_WT_A_140_body_endsm200_cleaned.sums'))
+```
+
+```{r}
+(rpb3_ChIPseq %<>%
+  mutate(rpb3_ChIPseq_mean = sum/size) %>%
+  dplyr::rename(id=name, rpb3_ChIPseq_median=median) %>%
+  dplyr::select(id, rpb3_ChIPseq_mean, rpb3_ChIPseq_median))
+```
+
+```{r Rpb3_ChIPseq median vs mean}
+ggplot(rpb3_ChIPseq, aes(x=rpb3_ChIPseq_median, y=rpb3_ChIPseq_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r Rpb3_ChIPseq mean vs Rpb3 chip2 mean}
+left_join(rpb3_ChIPseq, rpb3_chip2) %>%
+  ggplot(., aes(x=rpb3_chip2_mean, y=rpb3_ChIPseq_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r Rpb3_ChIPseq median vs Rpb3 chip2 median}
+left_join(rpb3_ChIPseq, rpb3_chip2) %>%
+  ggplot(., aes(x=rpb3_chip2_median, y=rpb3_ChIPseq_median)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+```{r NETseq vs Rpb3 ChIPseq mean}
+left_join(netseq_body_means, rpb3_ChIPseq) %>%
+  ggplot(., aes(x=rpb3_ChIPseq_mean, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r NETseq vs Rpb3 ChIPseq median}
+left_join(netseq_body_means, rpb3_ChIPseq) %>%
+  ggplot(., aes(x=rpb3_ChIPseq_median, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+```{r}
+left_join(netseq_body_means, rpb3_ChIPseq) %>%
+  do(tidy(cor.test(log2(.$rpb3_ChIPseq_mean), log2(.$NETseq_mean_signal), use='pairwise.complete')))
+```
+
+
+```{r}
+left_join(netseq_body_means, rpb3_ChIPseq) %>%
+  do(tidy(cor.test(log2(.$rpb3_ChIPseq_median), log2(.$NETseq_mean_signal), use='complete', na.action='omit')))
+```
+
+
+```{r}
+left_join(rpb3_chip2, rpb3_ChIPseq) %>%
+  filter(rpb3_chip2_median>0, rpb3_ChIPseq_median>0) %>%
+  do(tidy(cor.test(log2(.$rpb3_chip2_median), log2(.$rpb3_ChIPseq_median), use='complete', na.action='omit')))
+```
+
+```{r}
+left_join(rpb3_chip2, rpb3_ChIPseq) %>%
+  do(tidy(cor.test(log2(.$rpb3_chip2_mean), log2(.$rpb3_ChIPseq_mean), use='complete', na.action='omit')))
+```
+
+
+
+
+## Neugebauer chromatin RNA 3'seq
+
+We are taking data from Neugebauers lab where she prepares nascent chromatin and does 3' end seq. Data are from GSE70908. Sample GSM2065907 seems to contain the 3' end sequencing data, at single bp resolution and counts at each position mapped to sacCer3 in bedgraph format. 
+
+Pretty forward processing:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+
+## data is from GSM2065907 sample from GSE70908, these are the 3'seq data points mapped to sacCer3 in bedgraph format.
+
+## ups the neg strand file has values as negatives --> fix this first
+awk '{OFS="\t"}{$4*=(-1); print $0}' GSM2065907_SC_R1_3end_C.bedgraph > GSM2065907_SC_R1_3end_Cpos.bedgraph
+
+
+cat /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info | sed s/Mito/chrM/g > sacCer3_genome.info
+
+sort -k1,1 -k2,2n GSM2065907_SC_R1_3end_W.bedgraph -o GSM2065907_SC_R1_3end_W.bedgraph
+/Users/schmidm/ms_tools/bedGraphToBigWig GSM2065907_SC_R1_3end_W.bedgraph sacCer3_genome.info GSM2065907_SC_R1_3end_plus.bw
+
+sort -k1,1 -k2,2n GSM2065907_SC_R1_3end_Cpos.bedgraph -o GSM2065907_SC_R1_3end_Cpos.bedgraph
+/Users/schmidm/ms_tools/bedGraphToBigWig GSM2065907_SC_R1_3end_Cpos.bedgraph sacCer3_genome.info GSM2065907_SC_R1_3end_minus.bw
+```
+
+
+
+to make the metagene values:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+#### count over gene bodies
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+plus_bw="GSM2065907_SC_R1_3end_plus.bw"
+minus_bw="GSM2065907_SC_R1_3end_minus.bw"
+bwtool summary -keep-bed -header -with-sum $body_plus_bed $plus_bw $plus_bw"plus.sums"
+bwtool summary -keep-bed -header -with-sum $body_minus_bed $minus_bw $minus_bw"minus.sums"
+
+cat $plus_bw"plus.sums" $minus_bw"minus.sums" > ${plus_bw/_plus.bw/_body_endsm200_cleaned.sums}
+rm $plus_bw"plus.sums"
+rm $minus_bw"minus.sums"
+```
+
+
+#### load
+```{r}
+(nascent_3seq <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Neugebauer_nascentRNA/GSM2065907_SC_R1_3end_body_endsm200_cleaned.sums'))
+```
+
+```{r}
+(nascent_3seq %<>%
+  mutate(nascent_3seq_mean = sum/size) %>%
+  dplyr::rename(id=name) %>%
+  dplyr::select(id, nascent_3seq_mean))
+```
+
+
+```{r NETseq vs nascent 3seq mean}
+left_join(netseq_body_means, nascent_3seq) %>%
+  ggplot(., aes(x=nascent_3seq_mean, y=NETseq_mean_signal)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+```{r}
+left_join(netseq_body_means, nascent_3seq) %>%
+  do(tidy(cor.test(log2(.$nascent_3seq_mean), log2(.$NETseq_mean_signal), use='pairwise.complete')))
+```
+
+
+
+## combine all in one tbl
+
+```{r}
+(trx_estimates <- left_join(rpb3_chip2, rpb3_ChIPseq) %>%
+  left_join(., netseq_body_means) %>%
+  left_join(., crac_body_means) %>%
+  left_join(., pelechano_rates) %>%
+  left_join(., nascent_3seq))
+```
+
+
+```{r}
+save(trx_estimates, file='data/published_gene_body_trx_estimates.RData')
+```
+
+```{r}
+sessionInfo()
+```

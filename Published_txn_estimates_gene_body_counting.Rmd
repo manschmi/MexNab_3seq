@@ -784,7 +784,7 @@ left_join(netseq_body_means, nascent_3seq) %>%
 ## combine all in one tbl
 
 ```{r}
-(trx_estimates <- left_join(rpb3_chip2, rpb3_ChIPseq) %>%
+(txn_estimates <- left_join(rpb3_chip2, rpb3_ChIPseq) %>%
   left_join(., netseq_body_means) %>%
   left_join(., crac_body_means) %>%
   left_join(., pelechano_rates) %>%
@@ -793,7 +793,7 @@ left_join(netseq_body_means, nascent_3seq) %>%
 
 
 ```{r}
-save(trx_estimates, file='data/published_gene_body_trx_estimates.RData')
+save(txn_estimates, file='data/published_gene_body_txn_estimates.RData')
 ```
 
 ```{r}

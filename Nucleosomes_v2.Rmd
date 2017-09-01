@@ -914,6 +914,109 @@ term_nuc_plot(NETseq_dst1_nucs) +
 ```
 
 
+## Rpb3 ChIPseq data rel nucleosomes
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+
+bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_plus_unique_with_strand.bed"
+bwtool matrix 1000:1000 -starts -keep-bed $bed GSM2551210_WT_A_140.bw bwtool_out/GSM2551210_WT_A_140_unique_plus_nuc_mat.txt
+```
+
+
+#### Rpb3 ChIPseq
+```{r}
+mat_fname <- 'GSM2551210_WT_A_140_unique_plus_nuc_mat.txt'
+
+sample_name <- sub('_unique_plus_nuc_mat.txt', '', mat_fname) 
+
+RData_filename <- paste0('data/', sample_name, '_Rpb3_ChIPseq_rel_nucleosome_start_bwtool.RData')
+```
+
+```{r, eval = FALSE}
+Rpb3_ChIPseq_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq/', mat_fname), 1000, 1000, both_strands = TRUE)
+
+save(Rpb3_ChIPseq_nucs, file=RData_filename)
+```
+
+
+```{r, eval = TRUE}
+load(RData_filename, verbose=TRUE)
+```
+
+
+```{r Rpb3 ChIPseq plus nucleosomes}
+Rpb3_ChIPseq_nucs %>%
+  filter(nuc != '-1', nuc != '0') %>%
+  plus_nuc_plot(.) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r Rpb3 ChIPseq terminal nucleosome}
+term_nuc_plot(Rpb3_ChIPseq_nucs) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+## Rpb3 ChIP on chip rel nucleosomes
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip
+
+##nucleosomes
+
+bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_plus_unique_with_strand.bed"
+
+bwtool matrix 1000:1000 -starts -keep-bed $bed Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized_sacCer3.bw Cramer_Rpb3_unique_plus_nuc_mat.txt
+```
+
+
+```{r}
+mat_fname <- 'Cramer_Rpb3_unique_plus_nuc_mat.txt'
+
+sample_name <- sub('_unique_plus_nuc_mat.txt', '', mat_fname) 
+
+RData_filename <- paste0('data/', sample_name, '_ChIPonchip_rel_nucleosome_start_bwtool.RData')
+```
+
+```{r, eval = FALSE}
+Rpb3_ChIPonchip_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip/', mat_fname), 1000, 1000, both_strands = TRUE)
+
+save(Rpb3_ChIPonchip_nucs, file=RData_filename)
+```
+
+
+```{r, eval = TRUE}
+load(RData_filename, verbose=TRUE)
+```
+
+
+```{r Rpb3 ChIPonchip plus nucleosomes}
+Rpb3_ChIPonchip_nucs %>%
+  filter(nuc != '-1', nuc != '0') %>%
+  plus_nuc_plot(.) +
+  ggtitle(sample_name) +
+  facet_grid(nuc~., scales='free')+
+  xlab('bp to nucleosome border')
+```
+
+```{r Rpb3 ChIPonchip terminal nucleosome}
+term_nuc_plot(Rpb3_ChIPonchip_nucs) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
 
 
 ```{r}

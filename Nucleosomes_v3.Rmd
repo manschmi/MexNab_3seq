@@ -86,11 +86,15 @@ metagene_values <- function(d, restrict_to_genes = NULL) {
   if(!is.null(restrict_to_genes)){
     d %<>% filter(id %in% restrict_to_genes)
   }
+  
   d %>% 
     group_by(nuc, pos) %>%
     summarize(events=n(),
               sum_value = sum(value),
-              sum_log2_value = sum(log2(value)))
+              sum_log2_value = sum(log2(value)),
+              sum_log2_valuex = sum(log2(value+1)),
+              mean_log2_value = mean(log2(value)),
+              mean_log2_valuex = mean(log2(value+1)))
 }
 ```
 
@@ -110,6 +114,94 @@ greater1kb_names <- anno %>%
   filter( (end-start) > 1000) %$%
   name
 ```
+
+
+## plotting functions
+
+#### common theme for prettier and plot funs for annotated nucleosome array plots
+```{r}
+nuc_rel_nuc <- data.frame(
+  name = c('dn1', 'dn2', 'dn3', 'dn4', 'end', 'up1', 'up2', 'up3', 'start'),
+  border = c(0, 165, 330, 495, 1000, -165, -330, -495, -1000)
+)
+
+nucleosome_rel_nuc_theme <- list(scale_x_continuous(minor_breaks=NULL, breaks=nuc_rel_nuc$border),
+  geom_vline(xintercept = nuc_rel_nuc$border, color='orange', linetype=2),
+  geom_vline(xintercept = 0, color='black'))
+```
+
+```{r}
+plus_nuc_plot <- function (df) {
+  df %>%
+  filter(as.numeric(nuc) < 5) %>%
+  ungroup %>%
+  mutate(nuc = factor(nuc, levels=c('-1','0','+1','+2','+3','+4'))) %>%
+  group_by(nuc) %>%
+  mutate(roll_sum_log2_value = rollmean(sum_log2_valuex, k=25, fill = NA)) %>%
+  ggplot(., aes(x=pos, y=sum_log2_valuex, color=nuc)) + 
+    geom_line() +
+    geom_line(aes(y=roll_sum_log2_value), color='black') +
+    scale_color_brewer(palette = 'BrBG', direction = -1) +
+  facet_grid(nuc~.) +
+  theme_bw() +
+  xlab('bp to nucleosome upstream border') +
+    nucleosome_rel_nuc_theme
+}
+
+
+plus_nuc_plot_means <- function (df) {
+  df %>%
+  filter(as.numeric(nuc) < 5) %>%
+  ungroup %>%
+  mutate(nuc = factor(nuc, levels=c('-1','0','+1','+2','+3','+4'))) %>%
+  group_by(nuc) %>%
+  mutate(roll_mean_log2_value = rollmean(mean_log2_value, k=25, fill = NA)) %>%
+  ggplot(., aes(x=pos, y=mean_log2_value, color=nuc)) + 
+    geom_line() +
+    geom_line(aes(y=roll_mean_log2_value), color='black') +
+    scale_color_brewer(palette = 'BrBG', direction = -1) +
+  facet_grid(nuc~.) +
+  theme_bw() +
+  xlab('bp to nucleosome upstream border') +
+    nucleosome_rel_nuc_theme
+}
+
+
+plus_nuc_plot_events <- function (df) {
+  df %>%
+  filter(as.numeric(nuc) < 5) %>%
+  ungroup %>%
+  mutate(nuc = factor(nuc, levels=c('-1','0','+1','+2','+3','+4'))) %>%
+  group_by(nuc) %>%
+  mutate(roll_mean_log2_value = rollmean(events, k=25, fill = NA)) %>%
+  ggplot(., aes(x=pos, y=events, color=nuc)) + 
+    geom_line() +
+    geom_line(aes(y=roll_mean_log2_value), color='black') +
+    scale_color_brewer(palette = 'BrBG', direction = -1) +
+  facet_grid(nuc~.) +
+  theme_bw() +
+  xlab('bp to nucleosome upstream border') +
+    nucleosome_rel_nuc_theme
+}
+```
+
+
+```{r}
+term_nuc_plot <- function (df) {
+df %>%
+  filter(nuc == 'term') %>%
+  group_by(nuc) %>%
+  mutate(roll_sum_log2_value = rollmean(sum_log2_valuex, k=10, fill = NA)) %>%
+  ggplot(., aes(x=pos, y=sum_log2_valuex)) + 
+  geom_line(color='gray') +
+  geom_line(aes(y=roll_sum_log2_value), color='black') +
+  facet_grid(nuc~.) +
+  theme_bw() +
+  xlab('bp to terminal nucleosome upstream border') +
+    nucleosome_rel_nuc_theme
+}
+```
+
 
 
 # Nucleosome Positions
@@ -310,56 +402,6 @@ nuc_rel_tes %>%
 
 
 
-## common theme for prettier and plot funs for annotated nucleosome array plots
-```{r}
-nuc_rel_nuc <- data.frame(
-  name = c('dn1', 'dn2', 'dn3', 'up1', 'up2', 'up3'),
-  border = c(0, 165, 330, -165, -330, -495)
-)
-
-nucleosome_rel_nuc_theme <- list(scale_x_continuous(minor_breaks=NULL, breaks=nuc_rel_nuc$border),
-                         scale_y_continuous(breaks=NULL),
-  geom_vline(xintercept = nuc_rel_nuc$border, color='orange', linetype=2),
-  geom_vline(xintercept = 0, color='black'))
-```
-
-```{r}
-plus_nuc_plot <- function (df) {
-  df %>%
-  filter(as.numeric(nuc) < 5) %>%
-  ungroup %>%
-  mutate(nuc = factor(nuc, levels=c('-1','0','+1','+2','+3','+4'))) %>%
-  group_by(nuc) %>%
-  mutate(roll_sum_log2_value = rollmean(sum_log2_value, k=25, fill = NA)) %>%
-  ggplot(., aes(x=pos, y=sum_log2_value, color=nuc)) + 
-    geom_line() +
-    geom_line(aes(y=roll_sum_log2_value), color='black') +
-    scale_color_brewer(palette = 'BrBG', direction = -1) +
-  facet_grid(nuc~., scales='free') +
-  theme_bw() +
-  xlab('bp to nucleosome upstream border') +
-    nucleosome_rel_nuc_theme
-}
-```
-
-
-```{r}
-term_nuc_plot <- function (df) {
-df %>%
-  filter(nuc == 'term') %>%
-  group_by(nuc) %>%
-  mutate(roll_sum_log2_value = rollmean(sum_log2_value, k=10, fill = NA)) %>%
-  ggplot(., aes(x=pos, y=sum_log2_value)) + 
-  geom_line(color='gray') +
-  geom_line(aes(y=roll_sum_log2_value), color='black') +
-  facet_grid(nuc~.) +
-  theme_bw() +
-  xlab('bp to terminal nucleosome upstream border') +
-    nucleosome_rel_nuc_theme
-}
-```
-
-
 # 3'seq data rel nucleosomes
 
 #### create bwtool matrices
@@ -399,6 +441,15 @@ bw_minus=${bw/plus/minus}
 bwtool matrix 1000:1000 -starts -keep-bed $bed_minus $bw_minus bwtool_out/${bw_minus/.bw/_all_unique_minus_nuc_mat.txt}
 
 
+###pAminus_masked IP
+cd only_pAminus_positions
+bw="norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub_wo_noPaP_0rapa_sites.bw"
+bwtool matrix 1000:1000 -starts -keep-bed $bed_plus $bw ../bwtool_out/${bw/.bw/_all_unique_plus_nuc_mat.txt}
+
+bw_minus=${bw/plus/minus}
+bwtool matrix 1000:1000 -starts -keep-bed $bed_minus $bw_minus ../bwtool_out/${bw_minus/.bw/_all_unique_minus_nuc_mat.txt}
+
+
 ### INPUT
 
 ###xPap input
@@ -424,6 +475,15 @@ bwtool matrix 1000:1000 -starts -keep-bed $bed_plus $bw bwtool_out/${bw/.bw/_all
 bw_minus=${bw/plus/minus}
 bwtool matrix 1000:1000 -starts -keep-bed $bed_minus $bw_minus bwtool_out/${bw_minus/.bw/_all_unique_minus_nuc_mat.txt}
 
+
+###pAminus_masked input
+cd only_pAminus_positions
+bw="norm_xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered_wo_noPaP_0rapa_sites.bw"
+bwtool matrix 1000:1000 -starts -keep-bed $bed_plus $bw ../bwtool_out/${bw/.bw/_all_unique_plus_nuc_mat.txt}
+
+bw_minus=${bw/plus/minus}
+bwtool matrix 1000:1000 -starts -keep-bed $bed_minus $bw_minus ../bwtool_out/${bw_minus/.bw/_all_unique_minus_nuc_mat.txt}
+
 ```
 
 
@@ -443,6 +503,9 @@ RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RDa
 ```{r, eval = FALSE}
 agg_xPap_ip_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
 
+agg_xPap_ip_3seq %<>%
+  distinct(nuc,id,strand,pos,value)
+
 save(agg_xPap_ip_3seq, file=RData_filename)
 ```
 
@@ -455,11 +518,21 @@ load(RData_filename, verbose=TRUE)
 agg_xPap_ip_3seq_meta <- metagene_values(agg_xPap_ip_3seq, restrict_to_genes = greater750_names)
 ```
 
-
 ```{r ip pAplusandminus plus nucleosomes}
 plus_nuc_plot(agg_xPap_ip_3seq_meta) +
   ggtitle(sample_name)
 ```
+
+```{r ip pAplusandminus mean plus nucleosomes}
+plus_nuc_plot_means(agg_xPap_ip_3seq_meta) +
+  ggtitle(sample_name)
+```
+
+```{r ip pAplusandminus events plus nucleosomes}
+plus_nuc_plot_events(agg_xPap_ip_3seq_meta) +
+  ggtitle(sample_name)
+```
+
 
 ```{r ip pAplusandminus terminal nucleosome}
 term_nuc_plot(agg_xPap_ip_3seq_meta) +
@@ -483,6 +556,8 @@ RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RDa
 ```{r, eval = FALSE}
 agg_noPap_ip_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
 
+agg_noPap_ip_3seq %<>% distinct(nuc,id,strand,pos,value) 
+
 save(agg_noPap_ip_3seq, file=RData_filename)
 ```
 
@@ -498,6 +573,16 @@ agg_noPap_ip_3seq_meta <- metagene_values(agg_noPap_ip_3seq, restrict_to_genes =
 
 ```{r ip pAplus plus nucleosomes}
 plus_nuc_plot(agg_noPap_ip_3seq_meta) +
+  ggtitle(sample_name)
+```
+
+```{r ip pAplus mean plus nucleosomes }
+plus_nuc_plot_means(agg_noPap_ip_3seq_meta) +
+  ggtitle(sample_name)
+```
+
+```{r ip pAplus events plus nucleosomes }
+plus_nuc_plot_events(agg_noPap_ip_3seq_meta) +
   ggtitle(sample_name)
 ```
 
@@ -523,6 +608,8 @@ RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RDa
 ```{r, eval = FALSE}
 agg_xPappAminus_ip_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
 
+agg_xPappAminus_ip_3seq %<>% distinct(nuc,id,strand,pos,value)
+
 save(agg_xPappAminus_ip_3seq, file=RData_filename)
 ```
 
@@ -537,6 +624,16 @@ agg_xPappAminus_ip_3seq_meta <- metagene_values(agg_xPappAminus_ip_3seq, restric
 
 ```{r ip pAminus plus nucleosomes}
 plus_nuc_plot(agg_xPappAminus_ip_3seq_meta) +
+  ggtitle(sample_name)
+```
+
+```{r ip pAminus mean plus nucleosomes}
+plus_nuc_plot_means(agg_xPappAminus_ip_3seq_meta) +
+  ggtitle(sample_name)
+```
+
+```{r ip pAminus events plus nucleosomes}
+plus_nuc_plot_events(agg_xPappAminus_ip_3seq_meta) +
   ggtitle(sample_name)
 ```
 
@@ -564,6 +661,8 @@ RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RDa
 ```{r, eval = FALSE}
 agg_noPap_input_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
 
+agg_noPap_input_3seq %<>% distinct(nuc,id,strand,pos,value)
+
 save(agg_noPap_input_3seq, file=RData_filename)
 ```
 
@@ -579,6 +678,18 @@ agg_noPap_input_3seq_meta <- metagene_values(agg_noPap_input_3seq, restrict_to_g
 
 ```{r input pAplus plus nucleosomes}
 plus_nuc_plot(agg_noPap_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r input pAplus means plus nucleosomes}
+plus_nuc_plot_means(agg_noPap_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r input pAplus events plus nucleosomes}
+plus_nuc_plot_events(agg_noPap_input_3seq_meta) +
   ggtitle(sample_name) +
   xlab('bp to nucleosome border')
 ```
@@ -607,6 +718,9 @@ RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RDa
 ```{r, eval = FALSE}
 agg_xPappAminus_input_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
 
+agg_xPappAminus_input_3seq %<>%
+  distinct(nuc,id,strand,pos,value)
+
 save(agg_xPappAminus_input_3seq, file=RData_filename)
 ```
 
@@ -626,6 +740,17 @@ plus_nuc_plot(agg_xPappAminus_input_3seq_meta) +
   xlab('bp to nucleosome border')
 ```
 
+```{r input pAminus means plus nucleosomes}
+plus_nuc_plot_means(agg_xPappAminus_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r input pAminus events plus nucleosomes}
+plus_nuc_plot_events(agg_xPappAminus_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
 ```{r input pAminus terminal nucleosome}
 term_nuc_plot(agg_xPappAminus_input_3seq_meta) +
   ggtitle(sample_name) +
@@ -635,6 +760,117 @@ term_nuc_plot(agg_xPappAminus_input_3seq_meta) +
 
 ## 3'seq pAmasked input samples
 
+### input pAminus using mask
+
+```{r}
+mat_fname <- 'norm_xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered_wo_noPaP_0rapa_sites_all_unique_plus_nuc_mat.txt'
+
+sample_name <- sub('_KevinRoyAfiltered', '', mat_fname) %>%
+  sub('_all_unique_plus_nuc_mat.txt', '', .)
+
+RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RData')
+```
+
+
+```{r, eval = FALSE}
+agg_xPap_masked_input_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
+
+agg_xPap_masked_input_3seq %<>%
+  distinct(nuc,id,strand,pos,value)
+
+save(agg_xPap_masked_input_3seq, file=RData_filename)
+```
+
+
+```{r, eval = TRUE}
+load(RData_filename, verbose=TRUE)
+```
+
+```{r}
+agg_xPap_masked_input_3seq_meta <- metagene_values(agg_xPap_masked_input_3seq, restrict_to_genes = greater750_names)
+```
+
+
+```{r input pAminus masked plus nucleosomes}
+plus_nuc_plot(agg_xPap_masked_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r input pAminus masked means plus nucleosomes}
+plus_nuc_plot_means(agg_xPap_masked_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r input pAminus masked events plus nucleosomes}
+plus_nuc_plot_events(agg_xPap_masked_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r input pAminus masked terminal nucleosome}
+term_nuc_plot(agg_xPap_masked_input_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+
+
+### IP pAminus using mask
+
+```{r}
+mat_fname <- 'norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub_wo_noPaP_0rapa_sites_all_unique_plus_nuc_mat.txt'
+
+sample_name <- sub('_KevinRoyAfiltered', '', mat_fname) %>%
+  sub('_all_unique_plus_nuc_mat.txt', '', .)
+
+RData_filename <- paste0('data/', sample_name, '_rel_nucleosome_start_bwtool.RData')
+```
+
+
+```{r, eval = FALSE}
+agg_xPap_masked_ip_3seq <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/', mat_fname), 1000, 1000, both_strands = TRUE)
+
+agg_xPap_masked_ip_3seq %<>%
+  distinct(nuc,id,strand,pos,value) 
+
+save(agg_xPap_masked_ip_3seq, file=RData_filename)
+```
+
+
+```{r, eval = TRUE}
+load(RData_filename, verbose=TRUE)
+```
+
+```{r}
+agg_xPap_masked_ip_3seq_meta <- metagene_values(agg_xPap_masked_ip_3seq, restrict_to_genes = greater750_names)
+```
+
+
+```{r ip pAminus masked plus nucleosomes}
+plus_nuc_plot(agg_xPap_masked_ip_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r ip pAminus masked means plus nucleosomes}
+plus_nuc_plot_means(agg_xPap_masked_ip_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r ip pAminus masked events plus nucleosomes}
+plus_nuc_plot_events(agg_xPap_masked_ip_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r ip pAminus masked terminal nucleosome}
+term_nuc_plot(agg_xPap_masked_ip_3seq_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
 
 
 # CRAC data rel nucleosomes
@@ -664,7 +900,9 @@ RData_filename <- paste0('data/', sample_name, '_CRAC_rel_nucleosome_start_bwtoo
 ```{r, eval = FALSE}
 crac_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/', mat_fname), 1000, 1000, both_strands = TRUE)
 
-save(crac_nucs, file=RData_filename)
+crac_nucs %>%
+  distinct(nuc,id,strand,pos,value) %>%
+  save(., file=RData_filename)
 ```
 
 
@@ -679,6 +917,18 @@ crac_nucs_meta <- metagene_values(crac_nucs, restrict_to_genes = greater750_name
 
 ```{r CRAC Milligan plus nucleosomes}
 plus_nuc_plot(crac_nucs_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r CRAC Milligan means plus nucleosomes}
+plus_nuc_plot_means(crac_nucs_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r CRAC Milligan events plus nucleosomes}
+plus_nuc_plot_events(crac_nucs_meta) +
   ggtitle(sample_name) +
   xlab('bp to nucleosome border')
 ```
@@ -724,7 +974,9 @@ RData_filename <- paste0('data/', sample_name, '_NETseq_WT_rel_nucleosome_start_
 ```{r, eval = FALSE}
 NETseq_wt_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/', mat_fname), 1000, 1000, both_strands = TRUE)
 
-save(NETseq_wt_nucs, file=RData_filename)
+NETseq_wt_nucs %>%
+  distinct(nuc,id,strand,pos,value) %>%
+  save(., file=RData_filename)
 ```
 
 
@@ -742,9 +994,20 @@ plus_nuc_plot(NETseq_wt_nucs_meta) +
   xlab('bp to nucleosome border')
 ```
 
+```{r NETseq wt means plus nucleosomes}
+plus_nuc_plot_means(NETseq_wt_nucs_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
+```{r NETseq wt events plus nucleosomes}
+plus_nuc_plot_events(NETseq_wt_nucs_meta) +
+  ggtitle(sample_name) +
+  xlab('bp to nucleosome border')
+```
+
 ```{r NETseq wt terminal nucleosome}
-metagene_values(NETseq_wt_nucs_meta) %>%
-  term_nuc_plot(.) +
+term_nuc_plot(NETseq_wt_nucs_meta) +
   ggtitle(sample_name) +
   xlab('bp to nucleosome border')
 ```
@@ -763,7 +1026,9 @@ RData_filename <- paste0('data/', sample_name, '_NETseq_dst1_rel_nucleosome_star
 ```{r, eval = FALSE}
 NETseq_dst1_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/', mat_fname), 1000, 1000, both_strands = TRUE)
 
-save(NETseq_dst1_nucs, file=RData_filename)
+NETseq_dst1_nucs %>%
+  distinct(nuc,id,strand,pos,value) %>%
+  save(., file=RData_filename)
 ```
 
 
@@ -814,7 +1079,9 @@ RData_filename <- paste0('data/', sample_name, '_Rpb3_ChIPseq_rel_nucleosome_sta
 ```{r, eval = FALSE}
 Rpb3_ChIPseq_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq/', mat_fname), 1000, 1000, both_strands = TRUE)
 
-save(Rpb3_ChIPseq_nucs, file=RData_filename)
+Rpb3_ChIPseq_nucs %>%
+  distinct(nuc,id,strand,pos,value) %>%
+  save(., file=RData_filename)
 ```
 
 
@@ -873,7 +1140,9 @@ RData_filename <- paste0('data/', sample_name, '_ChIPonchip_rel_nucleosome_start
 ```{r, eval = FALSE}
 Rpb3_ChIPonchip_nucs <- load_bwtool_nuc_matrix(paste0('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip/', mat_fname), 1000, 1000, both_strands = TRUE)
 
-save(Rpb3_ChIPonchip_nucs, file=RData_filename)
+Rpb3_ChIPonchip_nucs %>%
+  distinct(nuc,id,strand,pos,value) %>%
+  save(., file=RData_filename)
 ```
 
 

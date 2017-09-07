@@ -38,7 +38,7 @@ Body and ends are derived using awk and bedtools
 
 
 # annotations for body and end counts
-bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin.bed"
+bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
 awk '{OFS="\t"}{if($6=="+"){$3-=200;if(($3-$2)>100) print $0}}' $bed | cut -f1-4 > ${bed/.bed/_body_endsm200_plus.bed}
 awk '{OFS="\t"}{if($6=="-"){$2+=200;if(($3-$2)>100) print $0}}' $bed | cut -f1-4 > ${bed/.bed/_body_endsm200_minus.bed}
 awk '{OFS="\t"}{if($6=="+"){$2=$3-200;$3+=200; print $0}}' $bed | cut -f1-4 > ${bed/.bed/_ends_pm200_plus.bed}
@@ -46,29 +46,34 @@ awk '{OFS="\t"}{if($6=="-"){$3=$2+200;$2-=200; print $0}}' $bed | cut -f1-4 > ${
 
 
 head -3 $bed
-#chrI    5076    6237    ST3634  SUT432  -       SUTs    SUT432
-#chrI    7277    9261    ST3635  YAL067C -       ORF-T   SEO1
-#chrI    9369    9601    ST0001  SUT001  +       SUTs    SUT001
+#chrI    5074    6237    ST3634:SUTs:SUT432:SUT432       0       -
+#chrI    7275    9260    ST3635:ORF-T:YAL067C:SEO1       0       -
+#chrI    9367    9600    ST0001:SUTs:SUT001:SUT001       0       +
+
 
 head -3 ${bed/.bed/_body_endsm200_plus.bed}
-#chrI    30073   30705   ST0002
-#chrI    31153   32785   ST0003
-#chrI    33361   34697   ST0004
+#chrI    30071   30704   ST0002:CUTs:CUT001:CUT001
+#chrI    31151   32784   ST0003:ORF-T:YAL062W:GDH3
+#chrI    33359   34696   ST0004:ORF-T:YAL061W:BDH2
+##note: ST0001 is gone because body is shorter than 100bp!
 
 head -3 ${bed/.bed/_body_endsm200_minus.bed}
-#chrI    5276    6237    ST3634
-#chrI    7477    9261    ST3635
-#chrI    10933   11141   ST3636
+#chrI    5274    6237    ST3634:SUTs:SUT432:SUT432
+#chrI    7475    9260    ST3635:ORF-T:YAL067C:SEO1
+#chrI    10931   11140   ST3636:CUTs:CUT436:CUT436
+
 
 head -3 ${bed/.bed/_ends_pm200_plus.bed}
-#chrI    9401    9801    ST0001
-#chrI    30705   31105   ST0002
-#chrI    32785   33185   ST0003
+#chrI    9400    9800    ST0001:SUTs:SUT001:SUT001
+#chrI    30704   31104   ST0002:CUTs:CUT001:CUT001
+#chrI    32784   33184   ST0003:ORF-T:YAL062W:GDH3
+##note: ST0001 ends are still counted
+
 
 head -3 ${bed/.bed/_ends_pm200_minus.bed}
-#chrI    4876    5276    ST3634
-#chrI    7077    7477    ST3635
-#chrI    10533   10933   ST3636
+#chrI    4874    5274    ST3634:SUTs:SUT432:SUT432
+#chrI    7075    7475    ST3635:ORF-T:YAL067C:SEO1
+#chrI    10531   10931   ST3636:CUTs:CUT436:CUT436
 ```
 
 
@@ -77,105 +82,118 @@ Original Steinmetz annotations never overlap on the same strand. Here I extend t
 
 First inspect the overlaps:  
 ```{bash, eval = FALSE}
+##inspect the overlaps
 bedtools intersect -wo -a ${bed/.bed/_body_endsm200_plus.bed} -b ${bed/.bed/_ends_pm200_plus.bed} > body_vs_end_intersect_plus.txt
 bedtools intersect -wo -a ${bed/.bed/_body_endsm200_minus.bed} -b ${bed/.bed/_ends_pm200_minus.bed} > body_vs_end_intersect_minus.txt
 
 head body_vs_end_intersect_plus.txt
-#chrI    36545   37129   ST0006  chrI    36193   36593   ST0005  48
-#chrI    37409   38833   ST0007  chrI    37129   37529   ST0006  120
-#chrI    39217   41769   ST0008  chrI    38833   39233   ST0007  16
-#chrI    42161   42633   ST0009  chrI    41769   42169   ST0008  8
-#chrI    62791   65407   ST0015  chrI    62447   62847   ST0014  56
-#chrI    79695   80447   ST0020  chrI    79335   79735   ST0019  40
-#chrI    94607   95343   ST0024  chrI    94287   94687   ST0023  80
-#chrI    130703  131887  ST0029  chrI    130367  130767  ST0028  64
-#chrI    132199  133911  ST0030  chrI    131887  132287  ST0029  88
-#chrI    136863  137439  ST0032  chrI    136503  136903  ST0031  40
+#chrI    35095   36192   ST0005:ORF-T:YAL060W:BDH1       chrI    34696   35096   ST0004:ORF-T:YAL061W:BDH2       1
+#chrI    36543   37128   ST0006:ORF-T:YAL059W:ECM1       chrI    36192   36592   ST0005:ORF-T:YAL060W:BDH1       49
+#chrI    37407   38832   ST0007:ORF-T:YAL058W:CNE1       chrI    37128   37528   ST0006:ORF-T:YAL059W:ECM1       121
+#chrI    39215   41768   ST0008:ORF-T:YAL056W:GPB2       chrI    38832   39232   ST0007:ORF-T:YAL058W:CNE1       17
+#chrI    42159   42632   ST0009:ORF-T:YAL055W:PEX22      chrI    41768   42168   ST0008:ORF-T:YAL056W:GPB2       9
+#chrI    62789   65406   ST0015:ORF-T:YAL041W:CDC24      chrI    62446   62846   ST0014:ORF-T:YAL042W:ERV46      57
+#chrI    79693   80446   ST0020:ORF-T:YAL034W-A:MTW1     chrI    79334   79734   ST0019:ORF-T:YAL035W:FUN12      41
+#chrI    94605   95342   ST0024:ORF-T:YAL027W:YAL027W    chrI    94286   94686   ST0023:ORF-T:YAL028W:FRT2       81
+#chrI    130699  131884  ST0029:ORF-T:YAL012W:CYS3       chrI    130364  130764  ST0028:ORF-T:YAL013W:DEP1       65
+#chrI    132195  133908  ST0030:ORF-T:YAL011W:SWC3       chrI    131884  132284  ST0029:ORF-T:YAL012W:CYS3       89
 
 wc -l body_vs_end_intersect_plus.txt
-#970 body_vs_end_intersect_plus.txt
+#1011 body_vs_end_intersect_plus.txt
 
 head body_vs_end_intersect_minus.txt
-#chrI    33277   34381   ST3640  chrI    34181   34581   ST3641  200
-#chrI    42941   43549   ST3643  chrI    43349   43749   ST3644  200
-#chrI    51939   52659   ST3645  chrI    52459   52859   ST3646  200
-#chrI    52859   54843   ST3646  chrI    54755   55155   ST3647  88
-#chrI    55155   56923   ST3647  chrI    56723   57123   ST3648  200
-#chrI    58075   58483   ST3649  chrI    58411   58811   ST3650  72
-#chrI    65667   67851   ST3651  chrI    67651   68051   ST3652  200
-#chrI    101683  105987  ST3661  chrI    105963  106363  ST3662  24
-#chrI    106363  108667  ST3662  chrI    108659  109059  ST3663  8
-#chrI    109059  110467  ST3663  chrI    110419  110819  ST3664  48
+#chrI    33275   34380   ST3640:SUTs:SUT435:SUT435       chrI    34179   34579   ST3641:CUTs:CUT438:CUT438       201
+#chrI    42939   43548   ST3643:ORF-T:YAL054C:ACS1       chrI    43347   43747   ST3644:ORF-T:YAL054C:ACS1       201
+#chrI    51937   52658   ST3645:ORF-T:YAL049C:YAL049C    chrI    52457   52857   ST3646:ORF-T:YAL048C:GEM1       201
+#chrI    52857   54842   ST3646:ORF-T:YAL048C:GEM1       chrI    54753   55153   ST3647:ORF-T:YAL047C:SPC72      89
+#chrI    55153   56922   ST3647:ORF-T:YAL047C:SPC72      chrI    56721   57121   ST3648:ORF-T:YAL046C:YAL046C    201
+#chrI    58073   58482   ST3649:ORF-T:YAL044C:GCV3       chrI    58409   58809   ST3650:ORF-T:YAL043C:PTA1       73
+#chrI    65665   67850   ST3651:ORF-T:YAL040C:CLN3       chrI    67649   68049   ST3652:CUTs:CUT440:CUT440       201
+#chrI    101681  105986  ST3661:ORF-T:YAL024C:LTE1       chrI    105961  106361  ST3662:ORF-T:YAL023C:PMT2       25
+#chrI    106361  108666  ST3662:ORF-T:YAL023C:PMT2       chrI    108657  109057  ST3663:ORF-T:YAL022C:FUN26      9
+#chrI    109057  110466  ST3663:ORF-T:YAL022C:FUN26      chrI    110417  110817  ST3664:ORF-T:YAL021C:CCR4       49
 
 wc -l body_vs_end_intersect_minus.txt
-#1050 body_vs_end_intersect_minus.txt
+#1074 body_vs_end_intersect_minus.txt
 
 wc -l ${bed/.bed/_body_endsm200_plus.bed}
-#    3381 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_plus.bed
+#    3381 /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_plus.bed
 wc -l ${bed/.bed/_body_endsm200_minus.bed}
-#    3385 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_minus.bed
+#    3385 /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_minus.bed
 ```
 
 
 --> roughly 1/3 of all body regions have overlapping end regions!  
 
+
+
 #### filter out ends_pm200 from body annotations:  
 ```{bash, eval = FALSE}
 bedtools subtract -a ${bed/.bed/_body_endsm200_plus.bed} -b ${bed/.bed/_ends_pm200_plus.bed} > ${bed/.bed/_body_endsm200_cleaned_plus.bed}
-
 bedtools subtract -a ${bed/.bed/_body_endsm200_minus.bed} -b ${bed/.bed/_ends_pm200_minus.bed} > ${bed/.bed/_body_endsm200_cleaned_minus.bed}
 
 #sanity check
 ##plus strand for ST0006 overlaps with extended end of ST0005
 ##body:
 grep ST0006 ${bed/.bed/_body_endsm200_plus.bed}
-#chrI    36545   37129   ST0006
+#chrI    36543   37128   ST0006:ORF-T:YAL059W:ECM1
+
 ##ends:
 grep ST0005 ${bed/.bed/_ends_pm200_plus.bed}
-#chrI    36193   36593   ST0005
+#chrI    36192   36592   ST0005:ORF-T:YAL060W:BDH1
+
 ##cleaned_body:
 grep ST0006 ${bed/.bed/_body_endsm200_cleaned_plus.bed}
-#chrI    36593   37129   ST0006
+#chrI    36592   37128   ST0006:ORF-T:YAL059W:ECM1
+
 
 
 
 ##minus strand for ST3640
-##body:
-#chrI    33277   34381   ST3640
+grep ST3640 ${bed/.bed/_body_endsm200_minus.bed}
+#chrI    33275   34380   ST3640:SUTs:SUT435:SUT435
+
+
 ##ends:
-#chrI    32877   33277   ST3640
-#chrI    34181   34581   ST3641
+grep ST3641 ${bed/.bed/_ends_pm200_minus.bed}
+#chrI    34179   34579   ST3641:CUTs:CUT438:CUT438
+
 ##cleaned_body:
-#chrI    33277   34181   ST3640
+grep ST3640 ${bed/.bed/_body_endsm200_cleaned_minus.bed}
+#chrI    33275   34179   ST3640:SUTs:SUT435:SUT435
 ```
 
 
 #### inspection of the cleaned annotation
 
 ```{bash, eval = FALSE}
+### total nr of regions
 wc -l ${bed/.bed/_body_endsm200_cleaned_plus.bed}
 #    3359 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed
 wc -l ${bed/.bed/_body_endsm200_cleaned_minus.bed}
 #    3366 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed
 ##lost some 40 body annotations completely
 
+
+### total bp in the different parts
 cat ${bed/.bed/_body_endsm200_plus.bed} | awk '{sum+=($3-$2)}END{print sum}'
-#4741689
+#4745432
 cat ${bed/.bed/_body_endsm200_cleaned_plus.bed} | awk '{sum+=($3-$2)}END{print sum}'
-#4629616
+#4632362
 cat ${bed/.bed/_body_endsm200_minus.bed} | awk '{sum+=($3-$2)}END{print sum}'
-#4717054
+#4720823
 cat ${bed/.bed/_body_endsm200_cleaned_minus.bed} | awk '{sum+=($3-$2)}END{print sum}'
-#4592248
+#4594953
 ```
---> lost taken some 200000 bp of body annotations by this overlap cleaning.  
+--> lost some 200000 bp of body annotations by this overlap cleaning.  
 
 
 #### how many body regions are "split apart" ?
 ```{bash, eval = FALSE}
-cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed | cut -f 4 | uniq -c | grep -v "  1"
+##how many body regions are "split apart" ?
+cat ${bed/.bed/_body_endsm200_plus.bed} | cut -f 4 | uniq -c | grep -v "  1"
 ##no output, ie 0
-cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed | cut -f 4 | uniq -c | grep -v "  1"
+cat ${bed/.bed/_body_endsm200_minus.bed} | cut -f 4 | uniq -c | grep -v "  1"
 ##no output ie 0
 ```
 --> none!  
@@ -246,7 +264,10 @@ ${body_plus_bed} ${pA_sites_plus/.bed/_Sc.bed} ${body_plus_bed/_cleaned_plus.bed
 bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
 ${body_minus_bed} ${pA_sites_minus/.bed/_Sc.bed} ${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts}
 
-cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/*_body_endsm200*_pAfilter.counts > /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts
+cat ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts} \
+${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts} > \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts
+
 
 
 ## count of genomic A-masked sites for effective gene end regions
@@ -256,7 +277,9 @@ ${ends_plus_bed} ${pA_sites_plus/.bed/_Sc.bed} ${ends_plus_bed/_plus.bed/_plus_p
 bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
 ${ends_minus_bed} ${pA_sites_minus/.bed/_Sc.bed} ${ends_minus_bed/_minus.bed/_minus_pAfilter.counts}
 
-cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/*ends_pm200*_pAfilter.counts > /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts
+cat ${ends_plus_bed/_plus.bed/_plus_pAfilter.counts} \
+${ends_minus_bed/_minus.bed/_minus_pAfilter.counts} > \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts
 ```
 
 
@@ -296,10 +319,10 @@ bedtools map -a $1 -b - -c $3 -o sum > $4
 #### counting raw reads files
 ```{bash, eval = FALSE}
 #### NON-NORMALIZED FILES
-body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
-body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_minus.bed"
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
 
 
 # A-filtered count files
@@ -328,6 +351,7 @@ for f in *plus_KevinRoyAfiltered.bedgraph
      echo "merging body"
      cat plus_gene_body.counts minus_gene_body.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
+
      echo "done"
   done
 
@@ -344,10 +368,10 @@ rm minus_gene_body.counts
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
 
 #### annotation files
-body_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed"
-body_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_ends_pm200_minus.bed"
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
 
 #### counts for input FILES
 for f in *input*_plus_KevinRoyAfiltered.bedgraph
@@ -437,6 +461,55 @@ for f in *ip*_plus_KevinRoyAfiltered.bedgraph
      echo "merging body"
      cat plus_gene_body.counts minus_gene_body.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
+
+     echo "done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+```
+
+
+
+
+
+
+#### counting pA-masked files
+```{bash, eval=FALSE}
+## NORMALIZED to S.pombe and pAplus masked track files
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+
+#### annotation files
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
+
+#### pAmasked NORMALIZED to S.pombe FILES
+for f in only_pAminus_positions/*_plus_*_wo_noPaP_0rapa_sites.bedgraph
+  do
+     fminus="${f/_plus/_minus}"
+     echo "plus strand file "$f
+     echo "minus strand file "$fminus
+
+     echo "end reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+     echo "merging ends"
+     outfile=$(echo $f | sed s/_plus_KevinRoyAfiltered//g | sed s/_wo_noPaP_0rapa_sites.bedgraph//g | sed s/only_pAminus_positions\\///g | sed s/xPap/xPappAmasked/g)
+     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+     bedtools_counts/${outfile}_endpm200_count_sum_per_anno.txt
+
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+     echo "merging body"
+     cat plus_gene_body.counts minus_gene_body.counts > \
+     bedtools_counts/${outfile}_body_endsm200_cleaned_count_sum_per_anno.txt
 
      echo "done"
   done
@@ -552,7 +625,9 @@ file_list
                      mutate(end_counts_df, part = 'end')) %>%
    mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
                          grepl('^xPappAminus', .$condition) ~ 'pA-',
-                         TRUE ~ 'pA+ + pA-')))
+                         grepl('^xPappAmasked', .$condition) ~ 'pA-X',
+                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
+                         TRUE ~ 'NA')))
 ```
 
 
@@ -602,10 +677,11 @@ seems to be perfectly correlated.
 mutate(raw_vs_norm, rel_diff = (norm_reads - (raw_reads/sf))/norm_reads) %>%
   group_by(condition, part) %>%
   do(tidy(summary(.$rel_diff))) %>%
+  arrange(maximum) %>%
   kable
 ```
 
--> can see that maximum relative difference at a single feature between norm and recomputed normalized is around 3E-6, ie 3 in a million, aka .0003%.
+-> can see that maximum relative difference at a single feature between norm and recomputed normalized is around 4E-6, ie 4 in a million, aka .0004%.
 -> its roughly stable between all libraries so appears to be a rounding thingy
 
 
@@ -668,6 +744,7 @@ BGsub_comparison %>%
 ```{r}
 (both_df %<>% 
   separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
+  separate(id, c('id', 'type', 'name', 'common_name'), sep=':') %>%
   filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
   dplyr::select(-BGsub))
 ```
@@ -677,45 +754,80 @@ BGsub_comparison %>%
 
 #### Original plain annotations
 ```{r}
-(anno <- read.table("/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3.bed", col.names = c('chr', 'start', 'end', 'id', 'name', 'strand', 'type', 'common_name')) %>%
+(anno <- read.table("/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed", col.names = c('chr', 'start', 'end', 'anno', 'pad', 'strand')) %>%
   tbl_df %>% 
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
   mutate(type = ifelse(grepl('^snR', name), 'snRNA', as.character(type)),
-         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'snRNA', 'other'))))
+         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'snRNA', 'other'))) %>%
+   arrange(id))
 ```
 
 
 
-#### cleaned region lengths and A-masked positions
+### cleaned region lengths and A-masked positions
 
 Note: for body regions stripped for overlapping ends, end regions are all 400bp. This info is contained in the A-mask count files.
 
 A-masked positions: nothing will ever be counted from those positions, so in practice these positions do not count to the length of each region -> subtract them:  
 ```{r}
-(effective_body_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'id', 'body_pA_masked')) %>%
+(effective_body_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
    tbl_df %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
    mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
 ```
 
 ```{r}
-(effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'id', 'end_pA_masked')) %>%
+(effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
    tbl_df %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
    mutate(pAfiltered_end_len = end - start - end_pA_masked))
 ```
-
 
 
 #### combine all of the above
 
 ```{r}
-(effective_lens <- left_join(
+(effective_lens <- full_join(
   dplyr::select(effective_body_len, id, pAfiltered_cleaned_body_len),
-  dplyr::select(effective_end_len, id, pAfiltered_end_len))
+  dplyr::select(effective_end_len, id, pAfiltered_end_len)) %>%
+   arrange(id)
   )
 ```
 
+
+### pAplus positions mask
+
+```{r}
+(body_pAplus_masked <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/noPap_0rapa_sites_per_cleaned_body.txt', col.names=c('chr', 'start', 'end', 'anno', 'body_pAplus_cnt')) %>%
+   tbl_df %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+   mutate(body_pAplus_cnt = ifelse(body_pAplus_cnt == '.', as.numeric(0), as.numeric(body_pAplus_cnt))))
+```
+
+
+
+```{r}
+(end_pAplus_masked <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/noPap_0rapa_sites_per_end.txt', col.names=c('chr', 'start', 'end', 'anno', 'end_pAplus_cnt')) %>%
+   tbl_df %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+   mutate(end_pAplus_cnt = ifelse(end_pAplus_cnt == '.', as.numeric(0), as.numeric(end_pAplus_cnt))))
+```
+
+
+#### combined pA plus masks 
+```{r}
+(pAplus_masked <- full_join(
+  dplyr::select(body_pAplus_masked, id, body_pAplus_cnt),
+  dplyr::select(end_pAplus_masked, id, end_pAplus_cnt)) %>%
+   arrange(id)
+  )
+```
+
+
 Final annotations, containing that info:  
 ```{r}
-(anno <- left_join(anno, effective_lens))
+(anno <- left_join(anno, effective_lens) %>%
+   left_join(pAplus_masked))
 ```
 
 
@@ -723,8 +835,10 @@ Final annotations, containing that info:
 (both_df %<>% 
   dplyr::select(id, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
   left_join(., anno) %>%
-  mutate(scaled_reads = case_when(.$part == 'body' ~ sum/pAfiltered_cleaned_body_len,
-                               .$part == 'end' ~ sum/pAfiltered_end_len)) %>%
+  mutate(scaled_reads = case_when(.$part == 'body' & pA != 'pA-X' ~ sum/pAfiltered_cleaned_body_len,
+                               .$part == 'end'  & pA != 'pA-X' ~ sum/pAfiltered_end_len,
+                               .$part == 'body' & pA == 'pA-X' ~ sum/(pAfiltered_cleaned_body_len-body_pAplus_cnt),
+                               .$part == 'end'  & pA == 'pA-X' ~ sum/(pAfiltered_end_len-end_pAplus_cnt))) %>%
   dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
 ```
 
@@ -923,12 +1037,16 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
 
 
 #### E-PAP libraries piechart
-
-```{r EPAP libraries piechart}
+```{r}
 pie_percents_pAplusandminus <- filter(both_totals, pA == 'pA+ + pA-') %>%
   group_by(pA, type, strain, fraction, rapa, rep) %>%
   mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
 
+kable(pie_percents_pAplusandminus)
+```
+
+
+```{r EPAP libraries piechart}
 pie_percents_pAplusandminus %>%
   filter(rapa == '0') %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
@@ -943,11 +1061,16 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
 
 #### noPAP libraries piechart
 
-```{r noPAP libraries piechart}
+```{r}
 pie_percents_pAplus <- filter(both_totals, pA == 'pA+') %>%
   group_by(pA, type, strain, fraction, rapa, rep) %>%
   mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
 
+kable(pie_percents_pAplus)
+```
+
+
+```{r noPAP libraries piechart}
 pie_percents_pAplus %>%
   filter(rapa == '0') %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
@@ -962,12 +1085,16 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
 
 #### pAminus piechart
 
-```{r pAminus libraries piechart}
+```{r}
 pie_percents_pAminus <- filter(both_totals, pA == 'pA-') %>%
   mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
   group_by(pA, type, strain, fraction, rapa, rep) %>%
   mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
 
+kable(pie_percents_pAminus)
+```
+
+```{r pAminus libraries piechart}
 pie_percents_pAminus %>%
   filter(rapa == '0') %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
@@ -980,106 +1107,32 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
 ```
 
 
+#### pAminus pAplus masked piechart
 
-# Correlation body and end
 
 ```{r}
-wide_df <- both_df %>% 
-  filter(rapa==0, scaled_reads > 0, pA != 'pA-') %>%
-  tidyr::unite(condition, c(part, pA, strain, fraction, rapa, rep), sep='_') %>% 
-  dplyr::select(id, condition, scaled_reads) %>%
-  spread(condition, scaled_reads)
+pie_percents_pAminus_masked <- filter(both_totals, pA == 'pA-X') %>%
+  mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
+  group_by(pA, type, strain, fraction, rapa, rep) %>%
+  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
+
+kable(pie_percents_pAminus_masked)
 ```
 
-```{r}
-wide_mat <- wide_df %>%
-  dplyr::select(-id) %>%
-  as.matrix %>%
-  t 
-```
-
-```{r eucldiian distance pAplus and pApluspluspAminus}
-dist <- wide_mat %>%
-  log2 %>%
-  dist
-
-hc <- hclust(dist, method = 'ward.D2')
-
-plot(hc)
-```
-
-```{r}
-cor_dist <- function(matrix, ...) {
-  cor <- cor(t(matrix), ...)
-  as.dist( (-.5*cor)+.5 )
-}
-```
-
-```{r pearson distance pAplus and pApluspluspAminus}
-dist <- wide_mat %>%
-  log2 %>%
-  cor_dist(., method='pearson', use='pairwise.complete')
-
-hc <- hclust(dist, method = 'ward.D2')
-
-pearson_hc_order <- hc$labels[hc$order]
-
-plot(hc)
-```
-
-```{r spearman distance pAplus and pApluspluspAminus}
-dist <- wide_mat %>%
-  log2 %>%
-  cor_dist(., method='spearman', use='pairwise.complete')
-
-hc <- hclust(dist, method = 'ward.D2')
-
-spearman_hc_order <- hc$labels[hc$order]
-
-plot(hc)
+```{r pAminus pAplus masked libraries piechart}
+pie_percents_pAminus_masked %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
 ```
 
 
-```{r pearson correlation matrix pAplus and pApluspluspAminus}
-cor_df <- wide_mat %>%
-  t %>%
-  log2 %>%
-  na.omit %>%
-  cor(., method='pearson', use='pairwise.complete') %>%
-  as.data.frame() %>%
-  rownames_to_column(var='study1') %>%
-  gather(study2, cor, -study1)
 
-cor_df %>%
-  mutate(study1 = factor(study1, levels=pearson_hc_order),
-         study2 = factor(study2, levels=pearson_hc_order)) %>%
-  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
-  geom_tile() +
-  scale_fill_gradient(low='#e5e5be', high='#003973', limits=c(0,1)) +
-  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
-        axis.text.y=element_text(size = 6))
-```
-
-
-```{r spearman correlation matrix pAplus and pApluspluspAminus}
-cor_df <- wide_mat %>%
-  t %>%
-  log2 %>%
-  na.omit %>%
-  cor(., method='spearman', use='pairwise.complete') %>%
-  as.data.frame() %>%
-  rownames_to_column(var='study1') %>%
-  gather(study2, cor, -study1)
-
-cor_df %>%
-  mutate(study1 = factor(study1, levels=spearman_hc_order),
-         study2 = factor(study2, levels=spearman_hc_order)) %>%
-  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
-  geom_tile() +
-  scale_fill_gradient(low='#e5e5be', high='#003973', limits=c(0,1)) +
-  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
-        axis.text.y=element_text(size = 6))
-```
 
 ```{r}
 sessionInfo()

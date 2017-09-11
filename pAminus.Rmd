@@ -75,10 +75,19 @@ for f in *xPappAminus*.bedgraph
     done
 ```
 
-#### visualize those stats
+#### load those stats
 ```{r}
-(stats <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/pAminus.stats', header=TRUE) %>% tbl_df %>%
-  mutate(file = sub('^norm_', '', file) %>% 
+(stats <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/pAminus.stats', header=TRUE) %>% tbl_df)
+```
+
+
+```{r}
+unique(stats$file)
+```
+
+```{r}
+(stats %<>%
+  mutate(file = sub('^norm_xPappAminus_', '', file) %>% 
            sub('_BGsub', '', .) %>%
            sub('_plus_KevinRoyAfiltered', '', .) %>%
            sub('_minus_KevinRoyAfiltered', '', .)) %>%
@@ -89,14 +98,25 @@ for f in *xPappAminus*.bedgraph
             sum_pAplus_positions = sum(sum_pAplus_positions),
             sum_pAplusandminus_positions = sum(sum_pAplusandminus_positions),
             sum_pAminus_positions = sum(sum_pAminus_positions)) %>%
-  separate(file, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
+  separate(file, c('strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
 ```
 
+#### sanity check
+```{r}
+stats %>%
+  mutate(sum_pAminus_inferred = sum_pAplusandminus_signal - sum_pAplus_signal,
+         pAminus_difference = sum_pAminus_signal - sum_pAminus_inferred) %>%
+  arrange(pAminus_difference) %>%
+  dplyr::select(-contains('positions'))
+```
 
+--> only minor differences, probably rounding errors --> ignore
+
+
+#### visualize those stats
 ```{r}
 (stats_signal <- stats %>%
   dplyr::select(-contains('positions')) %>%
-   dplyr::select(-Pap) %>%
   gather(signal_type, sum_signal, -strain, -fraction, -rapa, -rep))
 ```
 
@@ -142,7 +162,6 @@ ggplot(stats_signal_fractions, aes(x=factor(1), y=frac_signal, fill=signal_type)
 ```{r}
 (stats_pos <- stats %>%
   dplyr::select(-contains('signal')) %>%
-   dplyr::select(-Pap) %>%
   gather(signal_type, positive_positions, -strain, -fraction, -rapa, -rep))
 ```
 
@@ -178,27 +197,31 @@ ggplot(stats_pos_fractions, aes(x=factor(1), y=frac_positions, fill=signal_type)
 
 ####some sanity check:
 ```{bash, eval = FALSE}
-####some sanity check:
-
+###for SNR4
 awk '$1=="chrV" && $2 == 424882' norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#chrV    424882  424883  -113.1108
+#chrV    424882  424883  -113.3149
+
 
 awk '$1=="chrV" && $2 == 424882' norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#chrV    424882  424883  694.8
+#chrV    424882  424883  381.7
+
 
 awk '$1=="chrV" && $2 == 424882' norm_xPappAminus_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#chrV    424882  424883  807.9108
+#chrV    424882  424883  495.0149
+
 --> ups this oddity since negatives are allowed !!
 
 
 awk '$1=="chrV" && $2 == 424882' norm_noPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph
-#chrV    424882  424883  250.01
+#chrV    424882  424883  250.606
+
 
 awk '$1=="chrV" && $2 == 424882' norm_xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph
-#chrV    424882  424883  362005
+#chrV    424882  424883  361179
+
 
 awk '$1=="chrV" && $2 == 424882' norm_xPappAminus_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph
-#chrV    424882  424883  361754.99
+#chrV    424882  424883  360928.394
 ```
 
 --> ups this oddity since negatives are allowed !!

@@ -1,0 +1,42 @@
+---
+title: "README"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+## ANALYSIS PIPELINE
+
+Analysis are carried out in the following order:
+
+
+1. QC_and_mapping.Rmd
+    + adapter and quality trimming of raw reads
+    + mapping using STAR aligner
+    + obtain stats from the above steps.
+
+2. GenomicA_masking.Rmd
+    + Criteria for genomic masking
+    + create a bed annotation file for genomic A masking
+    + remove genmic A-mask positions from data.
+
+3. Sp_normalization.Rmd
+    + count S.pombe reads
+    + derive scaling factors using DESeq2
+    + apply to scaling of S. cerevisiae tracks
+
+4. BGSub.Rmd
+    + Subtract background from 2' 4tU IPs using negative (mock) IP data.
+    + sanity checks
+
+5. pAminus.Rmd
+    + Subtract [pA+] from [pA+ + pA-] data.
+    + sanity checks  
+
+6. body_end_counting.Rmd
+
+
+
+
+

@@ -33,7 +33,7 @@ I got output of that kind
 
 
 # QC and mapping
-We used the QC filtering and mapping strategy and settings recommended by Lexogen at that time. The information was from (\link{https://www.lexogen.com/quantseq-data-analysis/}), however, note that I don't know whether the information from the link has been changed since then.
+We used the QC filtering and mapping strategy and settings recommended by Lexogen at that time. The information was from (\link{https://www.lexogen.com/quantseq-data-analysis/}), however, note that I don't know whether the information from the link is stable and whether it has been changed since then.
 
 
 Here is the code used:
@@ -77,6 +77,7 @@ STAR \
 --outFileNamePrefix ../STAR_map/${sample}_trimmed_clean \
 --outSAMtype BAM SortedByCoordinate
 ```
+
 
 #### The adapter filtering file use was as follows
 
@@ -141,6 +142,24 @@ AAAAAAAAAAAAAAAAAA
 #### genome used
 Our samples are from S. cerevisiae and contain low amounts of total S.pombe RNA as spike-ins. I create an index file of a "merged" genome containing S. cerevisiae (UCSC release sacCer3) and S.pombe (ENSEMBL release EF2) for STAR mapping.
 S. cerevisiae and S. pombe are easily separated since all S. cervisiae chromosomes are name "chr..." whereas the S. pombe do not have the "chr" prefix.
+
+The index file was created as follows:
+```{bash, eval = FALSE}
+#!/bin/sh
+
+source /com/extra/STAR/git-2016-03-14/load.sh
+
+STAR \
+--runThreadN 1 \
+--runMode genomeGenerate \
+--genomeDir /home/schmidm/annotations/sacCer3_Sp_merged_genome/STAR_index \
+--genomeFastaFiles /home/schmidm/annotations/sacCer3_Sp_merged_genome/fasta/sacCer3_Sp_merged.fa \
+--sjdbGTFfile /home/schmidm/annotations/sacCer3_Sp_merged_genome/anno/r64_2_1.gff3 \
+--sjdbGTFtagExonParentTranscript Parent \
+--sjdbGTFfeatureExon CDS \
+--genomeSAindexNbases 11 \
+--sjdbOverhang 49
+```
 
 
 #### indexing of the bam files
@@ -311,7 +330,7 @@ Execution of the python script:
 ```{bash, eval = FALSE}
 #!/bin/sh
  
-##NOTE: use local python with HTSeq and pyBigWig installed
+##NOTE: use local python with HTSeq installed
 
 cd /home/schmidm/faststorage/Lexogen2/STAR_map
  
@@ -322,6 +341,21 @@ echo "done"
 ##job
 #cd /home/schmidm/faststorage/Lexogen2/STAR_map
 #for f in *.bam; do sbatch --mem=2g -c 1 scripts/bam_to_bedgraph.sh $f; done
+```
+
+
+HTSeq version used:  
+```{bash, eval = FALSE}
+python
+Python 2.7.11 |Continuum Analytics, Inc.| (default, Dec  6 2015, 18:08:32) 
+[GCC 4.4.7 20120313 (Red Hat 4.4.7-1)] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+Anaconda is brought to you by Continuum Analytics.
+Please check out: http://continuum.io/thanks and https://anaconda.org
+>>> import HTSeq
+>>> print HTSeq.__version__
+0.6.0
+>>> exit()
 ```
 
 

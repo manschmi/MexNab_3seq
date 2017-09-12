@@ -1,9 +1,9 @@
 ---
 title: "Count body and end signal for the various samples and tracks"
 author: "Manfred Schmid"
-date: "9 August 2017"
 output: html_document
 ---
+`r format(Sys.time(), "%d %B, %Y")`
 
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_counting/', dev='pdf')
@@ -319,6 +319,7 @@ bedtools map -a $1 -b - -c $3 -o sum > $4
 #### counting raw reads files
 ```{bash, eval = FALSE}
 #### NON-NORMALIZED FILES
+
 body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
 body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
 ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
@@ -330,35 +331,37 @@ cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_b
 
 for f in *plus_KevinRoyAfiltered.bedgraph
   do
-     echo "end reads counting"
      echo $f
+     echo " end reads counting"
      bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
 
      fminus="${f/_plus/_minus}"
-     echo $fminus
+     echo "  ${fminus}"
      bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
 
-     echo "merging ends"
+     echo "  merging ends"
      cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_anno.txt}
 
-     echo "body reads counting"
+     echo " body reads counting"
      bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
 
-     echo $fminus
+     echo "  ${fminus}"
      bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
 
-     echo "merging body"
+     echo "  merging body"
      cat plus_gene_body.counts minus_gene_body.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
 
-     echo "done"
+     echo " done"
   done
 
 rm plus_gene_endpm200.counts
 rm minus_gene_endpm200.counts
 rm plus_gene_body.counts
 rm minus_gene_body.counts
+
+
 ```
 
 
@@ -658,10 +661,19 @@ simply checks that $SpombeNormCounts = RawCounts / SpombeSizeFactor$
 
 
 ```{r}
-filter(raw_vs_norm, norm_reads != raw_reads/sf)
+raw_vs_norm %>%
+  mutate(rel_diff = ( (raw_reads/sf) - norm_reads ) / norm_reads ) %>%
+  group_by(condition, part, pA) %>%
+  do(tidy(summary(.$rel_diff))) %>%
+  arrange(maximum) %>%
+  kable
 ```
 
-apparently its not exactly the same values, probably rounding makes the difference ....
+apparently its not exactly but very close values ...
+
+-> can see that maximum relative difference at a single feature between norm and recomputed normalized is around 4E-6, ie 4 in a million, aka .0004%.
+-> its roughly stable between all libraries so appears to be a rounding thingy
+
 
 ```{r}
 mutate(raw_vs_norm, re_norm_reads = raw_reads/sf) %>%
@@ -673,26 +685,17 @@ mutate(raw_vs_norm, re_norm_reads = raw_reads/sf) %>%
 seems to be perfectly correlated.  
 
 
-```{r}
-mutate(raw_vs_norm, rel_diff = (norm_reads - (raw_reads/sf))/norm_reads) %>%
-  group_by(condition, part) %>%
-  do(tidy(summary(.$rel_diff))) %>%
-  arrange(maximum) %>%
-  kable
-```
-
--> can see that maximum relative difference at a single feature between norm and recomputed normalized is around 4E-6, ie 4 in a million, aka .0004%.
--> its roughly stable between all libraries so appears to be a rounding thingy
-
-
 
 ## Sanity check BGsub and pA minus method
 
+
 simply checks that 
 1. norm. counts for $BGsub = normIP  -  normnegativeIP$  
-2. norm. counts for $pAminus = pAplusandminus  -  pAplus$  
+2. norm. counts for $pAminus = pAplusandminus  -  pAplus$
+
 
 #### BGsub
+
 ```{r}
 IP_raw <- filter(both_df, grepl('ip', condition) & !(grepl('BGsub', condition))) %>%
   separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop')
@@ -732,7 +735,8 @@ BGsub_comparison %>%
 BGsub_comparison %>%
   filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
   group_by(pA, part, Pap, strain, rapa, rep) %>%
-  do(tidy(summary(.$relative_error))) %>% kable
+  do(tidy(summary(.$relative_error))) %>% 
+  kable
 ```
 
 --> perfectly correlated and same values
@@ -795,6 +799,8 @@ A-masked positions: nothing will ever be counted from those positions, so in pra
 ```
 
 
+
+
 ### pAplus positions mask
 
 ```{r}
@@ -841,6 +847,14 @@ Final annotations, containing that info:
                                .$part == 'end'  & pA == 'pA-X' ~ sum/(pAfiltered_end_len-end_pAplus_cnt))) %>%
   dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
 ```
+
+
+## save the counts
+
+```{r}
+save(both_df, file='data/norm_signal_body_end_pA+_pA-_BGsub.RData')
+```
+
 
 
 #### sanity check non-exisiting gene bodies
@@ -895,11 +909,13 @@ filter(both_df,
   kable
 ```
 
-
-## save the counts
 ```{r}
-save(both_df, file='data/norm_signal_body_end_pA+_pA-_BGsub.RData')
+filter(both_df,
+       common_name == 'SCR1',
+       rapa == 0, rep == 1) %>%
+  kable
 ```
+
 
 
 
@@ -907,7 +923,7 @@ save(both_df, file='data/norm_signal_body_end_pA+_pA-_BGsub.RData')
 
 Global distribution of pA+ and pA- signal in gene body an gene end regions.
 
-## sum signal per annotation class and sample
+# sum signal per annotation class and sample
 ```{r}
 (both_totals <- both_df %>%
   #mutate(sum = ifelse(sum < 0, 0, sum)) %>%
@@ -917,6 +933,19 @@ Global distribution of pA+ and pA- signal in gene body an gene end regions.
 
 ```{r barplot total all samples }
 both_totals %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r barplot total all samples only ORFs}
+both_totals %>%
+  filter(type == 'ORF-T') %>%
   group_by(part, pA, fraction, strain, rapa, rep) %>%
   summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
 ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
@@ -939,6 +968,20 @@ ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) +
   theme_bw() +
   theme(axis.text.x = element_blank())
 ```
+
+```{r barplot total all samples rapa0 only ORFT}
+both_totals %>%
+  filter(rapa == 0, type == 'ORF-T') %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
 
 ```{r barplot totals per type all samples rep1 rapa0}
 both_totals %>%
@@ -972,7 +1015,8 @@ both_totals %>%
   geom_bar(stat='identity') +
   facet_grid(pA+fraction~part+strain+rapa+rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
-  theme_bw() 
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45))
 ```
 
 ```{r barplot signal per type wo part}
@@ -982,7 +1026,8 @@ both_totals %>%
   geom_bar(stat='identity') +
   facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
-  theme_bw() 
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45))
 ```
 
 

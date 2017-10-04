@@ -1535,6 +1535,52 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
 ```
 
 
+# Violin plots per type and part
+
+```{r}
+withXUTs_both_df <- bind_rows(both_df, XUTs_both_df) %>%
+  mutate(type=factor(type, levels=c('ORF-T', 'XUT', 'SUTs', 'CUTs', 'snRNA')))
+```
+
+
+#### violin plot fun
+```{r}
+violin_plot <- function(df) {
+  ggplot(df, aes(x=type, y=scaled_reads, fill=type)) +
+  geom_violin(scale='width') +
+  geom_boxplot(fill='gray', width=.2, outlier.shape = NA) +
+  facet_grid(strain+part~pA+fraction+rep, scales='free') +
+  scale_y_log10() +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust=1, angle=45))
+}
+```
+
+
+
+```{r violins all at once}
+violin_plot(both_df)
+```
+
+
+```{r violins rapa0 rep1}
+both_df %>%
+  filter(rep == 1, rapa == 0, type != 'other', pA != 'pA+ + pA-') %>%
+  violin_plot(.)
+```
+
+```{r violins Mex and Nab allpA rapa0 rep1 with XUTs cleaned}
+withXUTs_both_df %>%
+  filter(rep == 1, rapa == 0, type != 'other') %>%
+  violin_plot(.)
+```
+
+```{r violins Mex and Nab pAplus and minus rapa0 rep1 with XUTs cleaned}
+withXUTs_both_df %>%
+  filter(rep == 1, rapa == 0, type != 'other', pA != 'pA+ + pA-', pA != 'pA-X') %>%
+  violin_plot(.)
+```
 
 
 ```{r}

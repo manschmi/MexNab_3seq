@@ -18,7 +18,7 @@ suppressWarnings(library('broom'))
 ```
 
 
-# Create body and end annotations
+# Create body and end annotations for Steinmetz transcription units
 
 Define gene body region: TSS to TES-200bp
 Define gene end region: TES+/-200bp
@@ -215,7 +215,6 @@ sort -k1,1 -k2,2n ${ends_minus_bed} -o ${ends_minus_bed}
 ```
 
 
-
 #### number of genomic pA masked sites in each body and end region
 Using this little script *bed_count_positions.sh*:  
 ```{bash, eval = FALSE}
@@ -282,6 +281,186 @@ ${ends_minus_bed/_minus.bed/_minus_pAfilter.counts} > \
 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts
 ```
 
+
+
+# Create body and end annotations for Wery et al XUTs
+
+#### Prepare XUT annotations from Wery et al., MolCell 2016
+```{bash, eval = FALSE}
+##################################################################
+#### from Wery et al. MolCell 2016 publication
+##################################################################
+
+## file GSE69384_Densities_MW2.txt directly downloaded from GEO looks like that:
+head GSE69384_Densities_MW2.txt | cut -f 1-10
+#Chr     Type    Start   Stop    Strand  ID      WT_S288C_1.densities    WT_S288C_2.densities    xrn1_S288C_1.densities  xrn1_S288C_2.densities
+#chr01   gene    1807    2169    -       YAL068C 0       0       0.00318707312792003     0.00366471906077318
+#chr01   gene    2480    2707    +       YAL067W-A       0       0       0       0
+#chr01   XUT     3555    4181    -       XUT0929 0.00716436469757472     0.00862246052128844     0.0659640267133975      0.0562245055902833
+#chr01   XUT     4200    4614    -       XUT0930 0.00541211646431247     0.00625304992406499     0.0634208353220376      0.060103600258765
+#chr01   XUT     5024    6332    -       XUT0931 0.00823600916494304     0.012555461841419       0.0771124395257458      0.0721549307511896
+#chr01   SUT     5075    6237    -       SUT432  0.00888368902009674     0.0139456992610005      0.0855494831534029      0.0803551888125638
+#chr01   gene    7235    9016    -       YAL067C 0.00529366947098577     0.00485412592309572     0.03229862535656        0.0246350559085308
+#chr01   SUT     9368    9600    +       SUT001  0.0154233705249076      0.0343403367610937      0.233367616461132       0.204111482538278
+#chr01   XUT     9384    9872    +       XUT0001 0.0110234519395812      0.0203426590065441      0.151415302470017       0.136701889995498
+
+awk '$2 == "XUT"' GSE69384_Densities_MW2.txt | head | cut -f 1-10
+#chr01   XUT     3555    4181    -       XUT0929 0.00716436469757472     0.00862246052128844     0.0659640267133975      0.0562245055902833
+#chr01   XUT     4200    4614    -       XUT0930 0.00541211646431247     0.00625304992406499     0.0634208353220376      0.060103600258765
+#chr01   XUT     5024    6332    -       XUT0931 0.00823600916494304     0.012555461841419       0.0771124395257458      0.0721549307511896
+#chr01   XUT     9384    9872    +       XUT0001 0.0110234519395812      0.0203426590065441      0.151415302470017       0.136701889995498
+#chr01   XUT     22797   23181   -       XUT0932 0.0163347515104704      0.0146039845629137      0.083387491911222       0.0742890906748164
+#chr01   XUT     24071   25647   +       XUT0002 0.0336120917257301      0.0412756146303412      0.222834918786222       0.20793736791278
+#chr01   XUT     27107   29200   +       XUT0003 0.0240262820688867      0.0230296285109278      0.147652121068527       0.130710500798344
+#chr01   XUT     30048   30816   +       XUT0004 0.0227815617620019      0.0208096188955392      0.152323652763707       0.159150790316751
+#chr01   XUT     31434   34359   -       XUT0933 0.0818272796530141      0.0803366964569189      0.686197212953655       0.596267701468921
+#chr01   XUT     34785   35094   -       XUT0934 0.010143353760534       0.0139516974112203      0.0625103270517283      0.0836797221667192
+
+
+awk '$2 == "XUT"' GSE69384_Densities_MW2.txt | wc -l
+#1798
+
+cut -f 1-6 GSE69384_Densities_MW2.txt | sed 1d | awk '{print $1"\t"$3-1"\t"$4"\t"$2":"$6"\t0\t"$5}' > tmp
+python ~/ms_tools/convert_chr_names.py tmp -f roman0 -t latin > GSE69384_anno.bed
+
+awk '$4 ~ /^XUT/' GSE69384_anno.bed > GSE69384_XUTs.bed
+
+wc -l GSE69384_XUTs.bed
+#1798 GSE69384_XUTs.bed
+
+
+
+#### compare Wery SUTs to my own SUT annotations based on Steinmetz SUTs
+awk '$4 ~ /^SUT/' GSE69384_anno.bed > GSE69384_SUTs.bed
+
+wc -l GSE69384_SUTs.bed
+#     847 GSE69384_SUTs.bed
+
+grep SUT ~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed > ~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_SUTs.bed
+#     849 /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_SUTs.bed
+
+
+## intersection comparison
+bedtools intersect -wo -s -a GSE69384_SUTs.bed -b ~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_SUTs.bed | head
+#chrI    5074    6237    SUT:SUT432      0       -       chrI    5074    6237    ST3634:SUTs:SUT432:SUT432       0       -       1163
+#chrI    9367    9600    SUT:SUT001      0       +       chrI    9367    9600    ST0001:SUTs:SUT001:SUT001       0       +       233
+#chrI    28082   29772   SUT:SUT433      0       -       chrI    28082   29772   ST3637:SUTs:SUT433:SUT433       0       -       1690
+#chrI    31483   32748   SUT:SUT434      0       -       chrI    31483   32748   ST3639:SUTs:SUT434:SUT434       0       -       1265
+#chrI    33075   34380   SUT:SUT435      0       -       chrI    33075   34380   ST3640:SUTs:SUT435:SUT435       0       -       1305
+#chrI    43439   45328   SUT:SUT002      0       +       chrI    43439   45328   ST0010:SUTs:SUT002:SUT002       0       +       1889
+#chrI    68717   69486   SUT:SUT003      0       +       chrI    68717   69486   ST0016:SUTs:SUT003:SUT003       0       +       769
+#chrI    191616  192201  SUT:SUT436      0       -       chrI    191616  192201  ST3678:SUTs:SUT436:SUT436       0       -       585
+#chrI    198780  199902  SUT:SUT004      0       +       chrI    198780  199902  ST0047:SUTs:SUT004:SUT004       0       +       1122
+#chrII   45287   45464   SUT:SUT437      0       -       chrII   45287   45464   ST3688:SUTs:SUT437:SUT437       0       -       177
+# -> highly similar
+
+## SUTs only present in one of the datasets
+bedtools intersect -v -s -a GSE69384_SUTs.bed -b ~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_SUTs.bed
+## -> no putput
+bedtools intersect -v -s -a ~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_SUTs.bed -b GSE69384_SUTs.bed
+# chrVII  198012  199109  ST1096:ORF-T:YGL162W:SUT1       0       +
+# chrXVI  576461  577430  ST3508:ORF-T:YPR009W:SUT2       0       +
+## why are they not in the Wery set ... don't know but its only those 2 ....
+
+
+## offset between Wery and Steinmetz (in principle both should be sacCer3!)
+bedtools intersect -wo -s -a GSE69384_SUTs.bed \
+-b ~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_SUTs.bed | \
+awk '{if( ($3-$2) != $13 )print $0}'
+## --> 1bp off at some chromosomes, otherwise appear identical
+
+
+#### XUTs vs SUTs
+bedtools intersect -wo -s -a GSE69384_SUTs.bed -b GSE69384_XUTs.bed | head
+#chrI    5074    6237    SUT:SUT432      0       -       chrI    5023    6332    XUT:XUT0931     0       -       1163
+#chrI    9367    9600    SUT:SUT001      0       +       chrI    9383    9872    XUT:XUT0001     0       +       217
+#chrI    31483   32748   SUT:SUT434      0       -       chrI    31433   34359   XUT:XUT0933     0       -       1265
+#chrI    33075   34380   SUT:SUT435      0       -       chrI    31433   34359   XUT:XUT0933     0       -       1284
+#chrI    43439   45328   SUT:SUT002      0       +       chrI    43194   45575   XUT:XUT0005     0       +       1889
+#chrI    68717   69486   SUT:SUT003      0       +       chrI    68697   69767   XUT:XUT0007     0       +       769
+#chrI    198780  199902  SUT:SUT004      0       +       chrI    198619  199910  XUT:XUT0014     0       +       1122
+#chrII   46787   47132   SUT:SUT005      0       +       chrII   46578   47370   XUT:XUT0020     0       +       345
+#chrII   126207  127560  SUT:SUT438      0       -       chrII   126092  127562  XUT:XUT0953     0       -       1353
+#chrII   164467  165004  SUT:SUT006      0       +       chrII   164458  164999  XUT:XUT0027     0       +       532
+
+#### XUTs not overlapping SUTs
+bedtools intersect -v -s -a GSE69384_XUTs.bed -b GSE69384_SUTs.bed > GSE69384_XUTs_minus_SUTs.bed
+wc -l GSE69384_XUTs_minus_SUTs.bed
+#     1258 GSE69384_XUTs_minus_SUTs.bed
+
+
+#### SUTs not overlapping XUTs
+bedtools intersect -v -s -a GSE69384_SUTs.bed -b GSE69384_XUTs.bed > GSE69384_SUTs_minus_XUTs.bed
+wc -l GSE69384_SUTs_minus_XUTs.bed
+#     312 GSE69384_SUTs_minus_XUTs.bed
+```
+
+
+#### XUT body and end regions
+```{bash, eval = FALSE}
+#### XUTs
+XUTs="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs.bed"
+cleanXUTs="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_nonoverlappingXUTs.bed"
+awk '{OFS="\t"}{if($6=="+"){$3-=200;if(($3-$2)>100) print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_body_endsm200_plus.bed}
+awk '{OFS="\t"}{if($6=="-"){$2+=200;if(($3-$2)>100) print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_body_endsm200_minus.bed}
+awk '{OFS="\t"}{if($6=="+"){$2=$3-200;$3+=200; print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_ends_pm200_plus.bed}
+awk '{OFS="\t"}{if($6=="-"){$3=$2+200;$2-=200; print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_ends_pm200_minus.bed}
+
+
+##subtract XUT bodies overlapping XUT ends
+bedtools subtract -a ${XUTs/.bed/_body_endsm200_plus.bed} -b ${XUTs/.bed/_ends_pm200_plus.bed} > ${XUTs/.bed/_body_endsm200_cleaned_plus.bed}
+bedtools subtract -a ${XUTs/.bed/_body_endsm200_minus.bed} -b ${XUTs/.bed/_ends_pm200_minus.bed} > ${XUTs/.bed/_body_endsm200_cleaned_minus.bed}
+
+wc -l ${XUTs/.bed/_body_endsm200_cleaned_plus.bed}
+#     739 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_plus.bed
+wc -l ${XUTs/.bed/_body_endsm200_plus.bed}
+#     742 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_plus.bed
+wc -l ${XUTs/.bed/_body_endsm200_minus.bed}
+#     703 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_minus.bed
+wc -l ${XUTs/.bed/_body_endsm200_cleaned_minus.bed}
+#     699 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_minus.bed
+
+```
+
+
+#### number of genomic pA masked sites for XUTs
+
+```{bash, eval = FALSE}
+#### Genomic A-masked positions inside XUT annotations
+
+## count of genomic A-masked sites per annotation
+pA_sites_plus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus_Sc.bed"
+pA_sites_minus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_minus_Sc.bed"
+
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_minus.bed"
+
+## count of genomic A-masked sites for cleaned gene body regions
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${body_plus_bed} ${pA_sites_plus} ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts}
+
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${body_minus_bed} ${pA_sites_minus} ${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts}
+
+cat ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts} \
+${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts} > \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_body_pAfilter.counts
+
+
+
+## count of genomic A-masked sites for effective gene end regions
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${ends_plus_bed} ${pA_sites_plus} ${ends_plus_bed/_plus.bed/_plus_pAfilter.counts}
+
+bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
+${ends_minus_bed} ${pA_sites_minus} ${ends_minus_bed/_minus.bed/_minus_pAfilter.counts}
+
+cat ${ends_plus_bed/_plus.bed/_plus_pAfilter.counts} \
+${ends_minus_bed/_minus.bed/_minus_pAfilter.counts} > \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_ends_pAfilter.counts
+```
 
 
 # counting
@@ -474,6 +653,86 @@ rm plus_gene_body.counts
 rm minus_gene_body.counts
 ```
 
+#### body and end counting Sp-normalized files for XUTs
+
+```{bash, eval = FALSE}
+#### NORMALIZED to S.pombe input FILES
+
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_minus.bed"
+
+# A-filtered bigwigs location
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
+
+for f in *input*_plus_KevinRoyAfiltered.bedgraph
+  do
+    echo $f
+    echo " end reads counting"
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+
+    fminus="${f/_plus/_minus}"
+    echo "  ${fminus}"
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+    echo "  merging ends"
+    cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+    bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_XUT.txt}
+
+    echo " body reads counting"
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+
+    echo "  ${fminus}"
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+    echo "  merging body"
+    cat plus_gene_body.counts minus_gene_body.counts > \
+    bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_XUT.txt}
+
+    echo " done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+
+
+
+
+#### BGsub IP NORMALIZED to S.pombe FILES
+for f in *ip*_plus_KevinRoyAfiltered_BGsub.bedgraph
+  do
+    fminus="${f/_plus/_minus}"
+    echo "plus strand file "$f
+    echo "minus strand file "$fminus
+
+    echo "end reads counting"
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+    echo "merging ends"
+    cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+    bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_endpm200_count_sum_per_XUT.txt}
+
+    echo "body reads counting"
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+    bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+    echo "merging body"
+    cat plus_gene_body.counts minus_gene_body.counts > \
+    bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_body_endsm200_cleaned_count_sum_per_XUT.txt}
+
+    echo "done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+```
+
 
 
 
@@ -639,6 +898,56 @@ save(both_df, file='data/norm_signal_body_end_raw_all.RData')
 ```
 
 
+## Sp-normalized counts for XUTs
+
+#### load and combine end counts
+```{r}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
+sfx <- '_endpm200_count_sum_per_XUT.txt$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+file_list
+```
+
+
+```{r, warning=FALSE}
+(end_counts_df <- read_bedgraph_sums(path, file_list, sfx))
+```
+
+
+#### load and combine body counts
+```{r}
+sfx <- '_body_endsm200_cleaned_count_sum_per_XUT.txt$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+file_list
+```
+
+```{r, warning=FALSE}
+(body_counts_df <- read_bedgraph_sums(path, file_list, sfx))
+```
+
+
+#### combine body and end 
+
+```{r}
+(XUTs_both_df <- bind_rows(mutate(body_counts_df, part = 'body'), 
+                     mutate(end_counts_df, part = 'end')) %>%
+   mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
+                         grepl('^xPappAminus', .$condition) ~ 'pA-',
+                         grepl('^xPappAmasked', .$condition) ~ 'pA-X',
+                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
+                         TRUE ~ 'NA')))
+```
+
+
+```{r}
+save(XUTs_both_df, file='data/norm_signal_XUTs_body_end_raw_all.RData')
+```
+
+
 ## Sanity check S.pombe normalization
 
 simply checks that $SpombeNormCounts = RawCounts / SpombeSizeFactor$  
@@ -753,6 +1062,14 @@ BGsub_comparison %>%
   dplyr::select(-BGsub))
 ```
 
+```{r}
+(XUTs_both_df %<>% 
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
+  separate(id, c('type', 'id'), sep=':') %>%
+  filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
+  dplyr::select(-BGsub))
+```
+
 
 ## Normalize reads to region length and correct for genomic A masked positions
 
@@ -781,9 +1098,23 @@ A-masked positions: nothing will ever be counted from those positions, so in pra
 ```
 
 ```{r}
+(effective_body_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
+   tbl_df %>%
+   separate(anno, c('type', 'id'), sep=':') %>%
+   mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
+```
+
+```{r}
 (effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
    tbl_df %>%
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+   mutate(pAfiltered_end_len = end - start - end_pA_masked))
+```
+
+```{r}
+(effective_end_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
+   tbl_df %>%
+   separate(anno, c('type', 'id'), sep=':') %>%
    mutate(pAfiltered_end_len = end - start - end_pA_masked))
 ```
 
@@ -794,6 +1125,14 @@ A-masked positions: nothing will ever be counted from those positions, so in pra
 (effective_lens <- full_join(
   dplyr::select(effective_body_len, id, pAfiltered_cleaned_body_len),
   dplyr::select(effective_end_len, id, pAfiltered_end_len)) %>%
+   arrange(id)
+  )
+```
+
+```{r}
+(effective_lens_XUTs <- full_join(
+  dplyr::select(effective_body_len_XUTs, id, pAfiltered_cleaned_body_len),
+  dplyr::select(effective_end_len_XUTs, id, pAfiltered_end_len)) %>%
    arrange(id)
   )
 ```
@@ -848,11 +1187,26 @@ Final annotations, containing that info:
   dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
 ```
 
+```{r}
+(XUTs_both_df %<>% 
+  dplyr::select(id, type, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
+  left_join(., effective_lens_XUTs) %>%
+  mutate(scaled_reads = case_when(.$part == 'body' & pA != 'pA-X' ~ sum/pAfiltered_cleaned_body_len,
+                               .$part == 'end'  & pA != 'pA-X' ~ sum/pAfiltered_end_len#,
+#                               .$part == 'body' & pA == 'pA-X' ~ sum/(pAfiltered_cleaned_body_len-body_pAplus_cnt),
+#                               .$part == 'end'  & pA == 'pA-X' ~ sum/(pAfiltered_end_len-end_pAplus_cnt)
+)) %>%
+  dplyr::select(id, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
+```
 
 ## save the counts
 
 ```{r}
 save(both_df, file='data/norm_signal_body_end_pA+_pA-_BGsub.RData')
+```
+
+```{r}
+save(XUTs_both_df, file='data/norm_signal_XUTs_body_end_pA+_pA-_BGsub.RData')
 ```
 
 
@@ -868,7 +1222,11 @@ body_len_NA_ids <- filter(anno, is.na(pAfiltered_cleaned_body_len)) %>% distinct
 table(body_len_NA_ids$type)
 ```
 
-mostly CUTs, many SUTs, some snRNAs very few ORFs.  
+```{r}
+(filter(effective_lens_XUTs, is.na(pAfiltered_cleaned_body_len)))
+```
+
+mostly CUTs, many SUTs and XUTs, some snRNAs very few ORFs.  
 
 
 ```{r}
@@ -925,7 +1283,7 @@ Global distribution of pA+ and pA- signal in gene body an gene end regions.
 
 # sum signal per annotation class and sample
 ```{r}
-(both_totals <- both_df %>%
+(both_totals <- bind_rows(both_df, XUTs_both_df) %>%
   #mutate(sum = ifelse(sum < 0, 0, sum)) %>%
   group_by(type, Pap, strain,fraction, rapa, part, pA, rep) %>% 
   summarize(total_Spnorm_signal = sum(sum)))

@@ -1,0 +1,150 @@
+---
+title: "Count body and end signal for the various samples and compare rapa effect"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_vs_rapa/', dev='pdf')
+```
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+
+```
+
+
+## Load the normalized signal
+
+```{r}
+load(file='data/norm_signal_body_end_pA+_pA-_BGsub.RData', verbose=TRUE)
+
+both_df
+```
+
+
+## average of replicates
+
+
+```{r}
+both_df_avg <- both_df %>%
+  group_by(id, type, part, pA, Pap, strain, fraction, rapa) %>%
+  summarize(scaled_reads = mean(scaled_reads)) %>%
+  unite(pA_part, c(pA, part), sep='_')
+```
+
+
+## Rapa effect violins
+
+
+```{r violin plot all}
+both_df_avg %>%
+  filter(pA_part == 'pA-_body' | pA_part == 'pA+_end') %>%
+  ggplot(., aes(x=rapa, y=scaled_reads, fill=rapa)) +
+  geom_violin() +
+  geom_boxplot(width=.1, fill='gray', outlier.shape = NA) +
+  scale_y_log10() +
+  facet_grid(fraction + type ~ strain + pA_part) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+```{r violin plot rapa 0 15 ORF-Ts}
+both_df_avg %>%
+  filter(rapa != 70, type == 'ORF-T',
+         pA_part == 'pA-_body' | pA_part == 'pA+_end') %>%
+  ggplot(., aes(x=rapa, y=scaled_reads, fill=rapa)) +
+  geom_violin() +
+  geom_boxplot(width=.1, fill='gray', outlier.shape = NA) +
+  scale_y_log10() +
+  facet_grid(fraction + type ~ strain + pA_part) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+#### summary scaled_reads in each group
+
+```{r}
+both_df_avg %>%
+  filter(rapa != 70, type == 'ORF-T',
+         pA_part == 'pA-_body' | pA_part == 'pA+_end') %>%
+  group_by(type, strain, fraction, pA_part, rapa) %>%
+  do(tidy(summary(.$scaled_reads))) %>%
+  kable
+```
+#### count TUs in each group
+
+```{r}
+both_df_avg %>%
+  filter(rapa != 70, type == 'ORF-T',
+         pA_part == 'pA-_body' | pA_part == 'pA+_end') %>%
+  group_by(type, strain, fraction, pA_part, rapa) %>%
+  summarise(n = n()) %>%
+  kable
+```
+```{r}
+both_df_avg %>%
+  filter(rapa != 70, type == 'ORF-T',
+         pA_part == 'pA-_body' | pA_part == 'pA+_end',
+         scaled_reads > 0) %>%
+  group_by(type, strain, fraction, pA_part, rapa) %>%
+  summarise(n = n()) %>%
+  kable
+```
+
+
+
+### p value rapa effect
+
+```{r}
+(both_df_avg_spread <- both_df_avg %>%
+  mutate(rapa = paste0('rapa_', rapa)) %>%
+  spread(rapa, scaled_reads) %>%
+  group_by(type, strain, fraction, pA_part))
+```
+
+
+#### Welch t.test log2 values
+```{r}
+both_df_avg_spread %>%
+  filter(rapa_15 > 0, rapa_0 > 0) %>%
+  do(tidy(t.test(log2(.$rapa_15), log2(.$rapa_0)))) %>%
+  kable
+```
+
+#### paired Welch t.test log2 values
+```{r}
+both_df_avg_spread %>%
+  filter(rapa_15 > 0, rapa_0 > 0) %>%
+  do(tidy(t.test(log2(.$rapa_15), log2(.$rapa_0), paired = TRUE))) %>%
+  kable
+```
+
+
+#### Wilcox t.test
+```{r}
+both_df_avg_spread %>%
+  filter(rapa_15 > 0, rapa_0 > 0) %>%
+  do(tidy(wilcox.test(.$rapa_15, .$rapa_0))) %>%
+  kable
+```
+
+#### paired Wilcox t.test
+```{r}
+both_df_avg_spread %>%
+  filter(rapa_15 > 0, rapa_0 > 0) %>%
+  do(tidy(wilcox.test(.$rapa_15, .$rapa_0, paired = TRUE))) %>%
+  kable
+```
+
+```{r}
+sessionInfo()
+```
+
+
+

@@ -35,7 +35,7 @@ Analysis are carried out in the following order:
     + sanity checks  
 
 6. body_end_counting.Rmd
-    + gene body and end annotations
+    + get gene body and end annotations
     + counting from various sample types
     + sanity checks
     + barplots, signal per type

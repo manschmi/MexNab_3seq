@@ -1,0 +1,34 @@
+---
+title: 'bedgraph to bigwigs'
+author: "Manfred Schmid"
+output: html_document
+---
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+genome_info="/Users/schmidm//Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin_chrM.info"
+
+
+for f in *input*.bedgraph
+do
+  sort -k1,1 -k2,2n $f -o $f
+  /Users/schmidm/ms_tools/bedGraphToBigWig $f $genome_info ../norm_and_pA_filtered_bw/${f/.bedgraph/.bw}
+done
+
+for f in *ip*_BGsub.bedgraph
+do
+  sort -k1,1 -k2,2n $f -o $f
+  /Users/schmidm/ms_tools/bedGraphToBigWig $f $genome_info ../norm_and_pA_filtered_bw/${f/.bedgraph/.bw}
+done
+```
+
+
+
+```{r}
+sessionInfo()
+```

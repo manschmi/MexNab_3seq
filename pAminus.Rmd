@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_pAminus_tracks/', dev='pd
 ```{r, message=FALSE,warning=FALSE}
 suppressWarnings(library('tidyverse'))
 suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
 ```
 
 
@@ -45,6 +46,7 @@ for f in norm_xPap_*_input_*.bedgraph
 
 
 ## ip files, each noPap has 3 matching xPap files, ie the replicates
+## only do the BGsub samples
 for f in norm_xPap_*_ip_*_KevinRoyAfiltered_BGsub.bedgraph
   do
     echo $f
@@ -57,67 +59,74 @@ for f in norm_xPap_*_ip_*_KevinRoyAfiltered_BGsub.bedgraph
 
 
 #### get stats for the effect of pAminus vs pA+
+
+counting signal and positions covered:  
 ```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+
 #### total signals and positions above 0
-echo "file sum_pAplus_signal sum_pAplusandminus_signal sum_pAminus_signal sum_pAplus_positions sum_pAplusandminus_positions sum_pAminus_positions" > pAminus.stats
-for f in *xPappAminus*.bedgraph
+echo "file sum_signal sum_positions" > pAminus.stats
+
+for f in norm_noPap*input*.bedgraph
     do
         echo $f
-        both=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' ${f/xPappAminus/xPap})
-        pAminus=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
-        noPap_file=$(echo ${f/xPappAminus/noPap} | sed s/_2_/_1_/g | sed s/_3_/_1_/g)
-        pAplus=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $noPap_file)
+        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
+        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
+        echo "${f/.bedgraph/} $total $total_pos" >> pAminus.stats
+    done
+    
+for f in norm_xPap*input*.bedgraph
+    do
+        echo $f
+        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
+        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
+        echo "${f/.bedgraph/} $total $total_pos" >> pAminus.stats
+    done
 
-        both_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' ${f/xPappAminus/xPap})
-        pAminus_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
-        pAplus_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $noPap_file)
-        echo "${f/.bedgraph/} $pAplus $both $pAminus $pAplus_pos $both_pos $pAminus_pos" >> pAminus.stats
+for f in norm_*ip*BGsub.bedgraph
+    do
+        echo $f
+        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
+        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
+        echo "${f/.bedgraph/} $total $total_pos" >> pAminus.stats
     done
 ```
 
-#### load those stats
 ```{r}
-(stats <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/pAminus.stats', header=TRUE) %>% tbl_df)
-```
-
-
-```{r}
-unique(stats$file)
-```
-
-```{r}
-(stats %<>%
-  mutate(file = sub('^norm_xPappAminus_', '', file) %>% 
-           sub('_BGsub', '', .) %>%
+(stats_pAminus <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/pAminus.stats', header=TRUE) %>% 
+   tbl_df %>%
+  mutate(file = sub('^norm_', '', file) %>% 
            sub('_plus_KevinRoyAfiltered', '', .) %>%
            sub('_minus_KevinRoyAfiltered', '', .)) %>%
   group_by(file) %>%
-  summarize(sum_pAplus_signal = sum(sum_pAplus_signal),
-            sum_pAplusandminus_signal = sum(sum_pAplusandminus_signal),
-            sum_pAminus_signal = sum(sum_pAminus_signal),
-            sum_pAplus_positions = sum(sum_pAplus_positions),
-            sum_pAplusandminus_positions = sum(sum_pAplusandminus_positions),
-            sum_pAminus_positions = sum(sum_pAminus_positions)) %>%
-  separate(file, c('strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
+  summarize(sum_signal = sum(sum_signal),
+            sum_positions = sum(sum_positions)) %>%
+  separate(file, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
+```
+
+```{r}
+noPaps <- stats_pAminus %>% filter(Pap == 'noPap') %>% dplyr::select(-sum_positions, -rep) %>% spread(Pap, sum_signal)
+
+Paps <- stats_pAminus %>% filter(Pap != 'noPap')%>% dplyr::select(-sum_positions) %>% spread(Pap, sum_signal)
+
+(stats_pAminus_signal <- left_join(Paps, noPaps))
 ```
 
 #### sanity check
 ```{r}
-stats %>%
-  mutate(sum_pAminus_inferred = sum_pAplusandminus_signal - sum_pAplus_signal,
-         pAminus_difference = sum_pAminus_signal - sum_pAminus_inferred) %>%
+stats_pAminus_signal %>%
+  mutate(pAminus_difference = xPappAminus - (xPap - noPap)) %>%
   arrange(pAminus_difference) %>%
-  dplyr::select(-contains('positions'))
+  kable
 ```
 
 --> only minor differences, probably rounding errors --> ignore
 
 
-#### visualize those stats
+#### visualize signal
 ```{r}
-(stats_signal <- stats %>%
-  dplyr::select(-contains('positions')) %>%
-  gather(signal_type, sum_signal, -strain, -fraction, -rapa, -rep))
+(stats_signal <- stats_pAminus_signal %>%
+  gather(Pap, sum_signal, -strain, -fraction, -rapa, -rep))
 ```
 
 ```{r}
@@ -126,30 +135,23 @@ filter(stats_signal, rapa == 0)
 
 ```{r pAplus minus and both signal}
 filter(stats_signal, rapa == 0) %>%
-  ggplot(., aes(x=rep, y=sum_signal, fill=signal_type)) +
+  ggplot(., aes(x=rep, y=sum_signal, fill=Pap)) +
   geom_bar(stat='identity', position='dodge') +
   facet_grid(fraction ~ strain, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
   theme_bw()
 ```
 
-```{r pAplus vs minus signal}
-filter(stats_signal, rapa == 0, signal_type != 'sum_pAplusandminus_signal') %>%
-  ggplot(., aes(x=rep, y=sum_signal, fill=signal_type)) +
-  geom_bar(stat='identity', position='dodge') +
-  facet_grid(fraction ~ strain, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw()
-```
 
 ```{r}
-(stats_signal_fractions <- filter(stats_signal, rapa == 0, signal_type != 'sum_pAplusandminus_signal') %>%
+(stats_signal_fractions <- filter(stats_signal, rapa == 0, Pap != 'xPap') %>%
   group_by(strain,fraction,rapa,rep) %>%
-  mutate(frac_signal = sum_signal/sum(sum_signal)))
+  mutate(frac_signal = sum_signal/sum(sum_signal),
+         pA = ifelse(Pap == 'noPap', 'pA+', 'pA-')))
 ```
 
 ```{r piechart pAplus vs minus signal}
-ggplot(stats_signal_fractions, aes(x=factor(1), y=frac_signal, fill=signal_type)) +
+ggplot(stats_signal_fractions, aes(x=factor(1), y=frac_signal, fill=pA)) +
   geom_bar(stat='identity') +
   facet_grid(fraction ~ strain + rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
@@ -159,69 +161,79 @@ ggplot(stats_signal_fractions, aes(x=factor(1), y=frac_signal, fill=signal_type)
 
 
 
+#### positions covered comparison
 ```{r}
-(stats_pos <- stats %>%
-  dplyr::select(-contains('signal')) %>%
-  gather(signal_type, positive_positions, -strain, -fraction, -rapa, -rep))
+noPaps_pos <- stats_pAminus %>% filter(Pap == 'noPap') %>% dplyr::select(-sum_signal, -rep) %>% spread(Pap, sum_positions)
+
+Paps_pos <- stats_pAminus %>% filter(Pap != 'noPap')%>% dplyr::select(-sum_signal) %>% spread(Pap, sum_positions)
+
+(stats_pAminus_positions <- left_join(Paps_pos, noPaps_pos))
+```
+
+
+
+```{r}
+(stats_positions <- stats_pAminus_positions %>%
+  gather(Pap, sum_positions, -strain, -fraction, -rapa, -rep))
 ```
 
 ```{r}
-filter(stats_pos, rapa == 0)
+filter(stats_positions, rapa == 0)
 ```
 
-```{r pAplus minus and both above 0 positions}
-filter(stats_pos, rapa == 0) %>%
-  ggplot(., aes(x=rep, y=positive_positions, fill=signal_type)) +
+```{r pAplus minus and both positions}
+filter(stats_positions, rapa == 0) %>%
+  ggplot(., aes(x=rep, y=sum_positions, fill=Pap)) +
   geom_bar(stat='identity', position='dodge') +
-  facet_grid(fraction ~ strain) +
+  facet_grid(fraction ~ strain, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
   theme_bw()
 ```
 
 
 ```{r}
-(stats_pos_fractions <- filter(stats_pos, rapa == 0, signal_type != 'sum_pAplusandminus_positions') %>%
+(stats_positions_fractions <- filter(stats_positions, rapa == 0, Pap != 'xPap') %>%
   group_by(strain,fraction,rapa,rep) %>%
-  mutate(frac_positions = positive_positions/sum(positive_positions)))
+  mutate(frac_positions = sum_positions/sum(sum_positions),
+         pA = ifelse(Pap == 'noPap', 'pA+', 'pA-')))
 ```
 
 ```{r piechart pAplus vs minus positions}
-ggplot(stats_pos_fractions, aes(x=factor(1), y=frac_positions, fill=signal_type)) +
+ggplot(stats_positions_fractions, aes(x=factor(1), y=frac_positions, fill=pA)) +
   geom_bar(stat='identity') +
   facet_grid(fraction ~ strain + rep, scales='free') +
   scale_fill_brewer(palette = 'Set1') +
   coord_polar(theta='y') +
   theme_bw()
 ```
-
 
 ####some sanity check:
 ```{bash, eval = FALSE}
 ###for SNR4
 awk '$1=="chrV" && $2 == 424882' norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#chrV    424882  424883  -113.3149
+#chrV	424882	424883	-111.6035
 
 
 awk '$1=="chrV" && $2 == 424882' norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#chrV    424882  424883  381.7
+#chrV	424882	424883	802.2
 
 
 awk '$1=="chrV" && $2 == 424882' norm_xPappAminus_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#chrV    424882  424883  495.0149
+#chrV	424882	424883	913.8035
 
---> ups this oddity since negatives are allowed !!
+# --> ups this oddity since negatives are allowed in both BGsub files !!
 
 
 awk '$1=="chrV" && $2 == 424882' norm_noPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph
-#chrV    424882  424883  250.606
+#chrV	424882	424883	249.642
 
 
 awk '$1=="chrV" && $2 == 424882' norm_xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph
-#chrV    424882  424883  361179
+#chrV	424882	424883	362039
 
 
 awk '$1=="chrV" && $2 == 424882' norm_xPappAminus_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph
-#chrV    424882  424883  360928.394
+#chrV	424882	424883	361789.358
 ```
 
 --> ups this oddity since negatives are allowed !!

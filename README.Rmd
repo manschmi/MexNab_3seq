@@ -8,8 +8,12 @@ output: html_document
 
 ## ANALYSIS PIPELINE
 
-Analysis are carried out in the following order:
 
+### RAW DATA PROCESSING
+
+Raw data are processed in the following order:  
+
+Same procedure for 10min and 2min 4tU labelling data.
 
 1. QC_and_mapping.Rmd
     + adapter and quality trimming of raw reads
@@ -19,7 +23,7 @@ Analysis are carried out in the following order:
 2. GenomicA_masking.Rmd
     + Criteria for genomic masking
     + create a bed annotation file for genomic A masking
-    + remove genmic A-mask positions from data.
+    + remove genomic A-mask positions from data.
 
 3. Sp_normalization.Rmd
     + count S.pombe reads
@@ -27,19 +31,82 @@ Analysis are carried out in the following order:
     + apply to scaling of S. cerevisiae tracks
 
 4. BGSub.Rmd
-    + Subtract background from 2' 4tU IPs using negative (mock) IP data.
+    + Subtract background from 4tU IPs using negative (mock) IP data.
     + sanity checks
 
 5. pAminus.Rmd
+--> For the 2min 4tU data one extra step is getting the pAminus from pAplusAndMinus.
     + Subtract [pA+] from [pA+ + pA-] data.
     + sanity checks  
 
 6. body_end_counting.Rmd
+    + get gene body and end annotations for mRNAs, SUTs, CUTs and snRNAs 
+      from Xu et al (Steinmetz lab)
+    + get gene body and end annotations for XUTs 
+      from Wery et al (Morillon lab)
+    + counting from non-normalized reads from 10min data for use with DESeq2
+    + counting from normalized reads from 2min data for direct use
+    
+    
+
+### ANALYSIS for Tudek et al. Paper
+-> uses both 10min 4tU and 2min 4tU data
+
+No specific order:
+
++ DESeq2_10min_data.Rmd 
+    ++ Differential expression 15min rapa vs 0min rapa using 
+        S.pombe for normalization.
+    ++ Differential binding ip rel neg. control 
+        for both 0 and 15min rapa IPs, again using 
+        S.pombe for normalization.
+
++ Mex_vs_Nab_scatters_10min_data.Rmd
+    ++ for inputs using DESeq2 results log2FCs as is
+    ++ for IPs using DESeq2 results log2FCs as is
+    ++ for IPs only genes sig over background in rapa == 0min
+    ++ for IPs only genes sig over background at rapa == 0min and 15min
+
++ Correlation_10min_data_with_published_halflife_and_txn.Rmd
+    ++ get published decay rate datasets and cross-compare them
+    ++ correlate published decay rates with our own data
+    ++ get published transcription data
+    ++ correlate published txn estimates with our own data
+    
++ Body_pAMinus_vs_End_pAPlus_2min_data_vs_rapamycin.Rmd
+    ++ get published decay rate datasets and cross-compare them
+    ++ correlate published decay rates with our own data
+    ++ get published transcription data
+    ++ correlate published txn estimates with our own data
+
+
+
+
+### ANALYSIS for Schmid et al. Paper
+-> uses only 2min 4tU data
+
+No specific order:
+
++ 2min_body_end_counts_to_R.Rmd
     + get gene body and end annotations
     + counting from various sample types
     + sanity checks
+
++ 2min_end_vs_body_plots.Rmd
     + barplots, signal per type
     + piecharts, signal distribution
+    
++ heatmaps.Rmd 
+    ++ protein-coding genes
+    ++ introns of protein-coding genes
+    ++ 
+
++ junction_and_introns.Rmd
+    ++ junction reads
+    ++ intronic vs exonic signal levels
+
++ pAmasking.Rmd
+    
 
 
 

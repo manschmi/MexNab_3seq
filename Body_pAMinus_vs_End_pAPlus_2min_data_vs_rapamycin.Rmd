@@ -1,0 +1,195 @@
+---
+title: "Body and end signal for the various samples and compare rapa effect"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_vs_rapa/', dev='pdf')
+```
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+```
+
+
+## Load the normalized signal
+
+```{r}
+load(file='data/norm_2min_body_end_scaled_and_BGsub.RData', verbose=TRUE)
+
+both_df
+```
+
+
+## average of replicates
+
+
+```{r}
+both_df_avg <- both_df %>%
+  group_by(id, type, part, pA, Pap, strain, fraction, rapa) %>%
+  summarize(scaled_reads = mean(scaled_reads)) %>%
+  unite(pA_part, c(pA, part), sep='_')
+```
+
+
+
+
+## Rapa effect violins
+
+```{r violin plot all}
+both_df_avg %>%
+  filter(pA_part == 'pA-_body' | pA_part == 'pA+_end') %>%
+  ggplot(., aes(x=rapa, y=scaled_reads, fill=rapa)) +
+  geom_violin() +
+  geom_boxplot(width=.1, fill='gray', outlier.shape = NA) +
+  scale_y_log10() +
+  facet_grid(fraction + type ~ strain + pA_part) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+#### Subset to only interesting samples and ORF-Ts
+```{r}
+both_df_avg_ORFs <- both_df_avg %>%
+  filter(rapa != 70, type == 'ORF-T',
+         pA_part == 'pA-_body' | pA_part == 'pA+_end')
+```
+
+```{r violin plot rapa 0 15 ORF-Ts}
+both_df_avg_ORFs %>%
+  ggplot(., aes(x=rapa, y=scaled_reads, fill=rapa)) +
+  geom_violin() +
+  geom_boxplot(width=.1, fill='gray', outlier.shape = NA) +
+  scale_y_log10() +
+  facet_grid(fraction + type ~ strain + pA_part) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+```{r violin plot rapa 0 15 ORF-Ts with pseudocount}
+pseudocount <- 1e-6
+
+both_df_avg_ORFs %>%
+  mutate(scaled_reads = ifelse(scaled_reads <= 0, pseudocount, scaled_reads + pseudocount)) %>%
+  ggplot(., aes(x=rapa, y=scaled_reads, fill=rapa)) +
+  geom_violin() +
+  geom_boxplot(width=.1, fill='gray', outlier.shape = NA) +
+  scale_y_log10() +
+  facet_grid(fraction + type ~ strain + pA_part) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+
+```{r violin plot rapa 0 15 ORF-Ts only genes above bkgd}
+all_above0_ids <- both_df_avg_ORFs %>% filter(scaled_reads > 0) %>%
+  group_by(id) %>%
+  summarize(cnt = n()) %>%
+  filter(cnt == 16) %$%
+  id
+
+both_df_avg_ORFs %>%
+  filter(id %in% all_above0_ids) %>%
+  ggplot(., aes(x=rapa, y=scaled_reads, fill=rapa)) +
+  geom_violin() +
+  geom_boxplot(width=.1, fill='gray', outlier.shape = NA) +
+  scale_y_log10() +
+  facet_grid(fraction + type ~ strain + pA_part) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+#### summary scaled_reads in each group
+
+```{r}
+both_df_avg_ORFs %>%
+  group_by(type, strain, fraction, pA_part, rapa) %>%
+  do(tidy(summary(.$scaled_reads))) %>%
+  kable
+```
+
+```{r}
+both_df_avg_ORFs %>%
+  filter(scaled_reads > 0) %>%
+  group_by(type, strain, fraction, pA_part, rapa) %>%
+  do(tidy(summary(.$scaled_reads))) %>%
+  kable
+```
+
+```{r}
+both_df_avg_ORFs %>%
+  filter(id %in% all_above0_ids) %>%
+  group_by(type, strain, fraction, pA_part, rapa) %>%
+  do(tidy(summary(.$scaled_reads))) %>%
+  kable
+```
+
+
+### p value rapa effect
+
+```{r}
+(both_df_avg_spread <- both_df_avg %>%
+  mutate(rapa = paste0('rapa_', rapa)) %>%
+  spread(rapa, scaled_reads) %>%
+  group_by(type, strain, fraction, pA_part))
+```
+
+
+using Wilcox rank sum test. Not a t.test since we have the data points at or below background. Values below background are unlikely to reflect anything except that the value is below background. This can only be taken into account with a non-parametric test.  
+
+
+3 versions of the test were done:  
+
+1. version with pseudo-counts
+```{r}
+pseudocount_wilcox <- both_df_avg_spread %>%
+  mutate(rapa_0 = ifelse(rapa_0 <= 0, pseudocount, rapa_0 + pseudocount),
+         rapa_15 = ifelse(rapa_15 <= 0, pseudocount, rapa_15 + pseudocount)) %>%
+  do(tidy(wilcox.test(.$rapa_15, .$rapa_0))) 
+
+kable(pseudocount_wilcox)
+```
+
+2.  for the log-scaled violins without pseudocounts -> test with 0 and negatives removed
+```{r}
+aboveBG_wilcox <- both_df_avg_spread %>%
+  filter(rapa_15 > 0, rapa_0 > 0) %>%
+  do(tidy(wilcox.test(.$rapa_15, .$rapa_0))) 
+
+kable(aboveBG_wilcox)
+```
+
+3.  for the log-scaled violins without pseudocounts -> test with 0 and negatives removed
+```{r}
+all_wilcox <- both_df_avg_spread %>%
+  do(tidy(wilcox.test(.$rapa_15, .$rapa_0))) 
+
+kable(all_wilcox)
+```
+
+correspondance between the 2 versions:
+```{r wilcox test p value comparison pseudocount vs aboveBG}
+plot(pseudocount_wilcox$p.value~aboveBG_wilcox$p.value)
+```
+
+```{r wilcox test p value comparison pseudocount vs all}
+plot(pseudocount_wilcox$p.value~all_wilcox$p.value)
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+

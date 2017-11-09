@@ -1,0 +1,311 @@
+---
+title: "Mex vs Nab scatters"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup, echo=TRUE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_Mex_vs_Nab_scatters_10min_data/'), 
+                      dev='pdf', 
+                      echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+
+```{r load packages}
+library(tidyverse)
+library(magrittr)
+library(knitr)
+library(broom)
+```
+
+
+
+## load the DESeq2 results
+```{r}
+load(file='data/DESeq2_10min_results_df.RData', verbose=TRUE)
+
+dds_results_df
+```
+
+
+## Mex vs Nab2 effect
+
+```{r}
+(LFC_spread <- dds_results_df %>%
+  dplyr::select(id, type, log2FoldChange, comparison) %>%
+  spread(comparison, log2FoldChange))
+```
+
+```{r}
+scatter_theme <- list(geom_point(size=.2, alpha=.2), 
+  stat_smooth(method='lm'), 
+  facet_wrap(~type), 
+  xlim(-4,4), ylim(-4,4),
+  geom_hline(yintercept = 0, color='orange'), 
+  geom_vline(xintercept = 0, color='orange'), 
+  theme_bw())
+```
+
+
+### inputs
+```{r scatter Mex vs Nab input 15}
+ggplot(LFC_spread, aes(x=Mex_in_15rel0, y=Nab_in_15rel0)) +
+  scatter_theme
+```
+
+#### mean and medians
+```{r}
+LFC_spread %>%
+  filter(!is.na(Mex_in_15rel0), !is.na(Nab_in_15rel0)) %>%
+  group_by(type) %>%
+  summarise(mean_mex = mean(Mex_in_15rel0),
+            median_mex = median(Mex_in_15rel0),
+            mean_nab = mean(Nab_in_15rel0), 
+            median_nab = median(Nab_in_15rel0))
+```
+
+#### pearson correlation
+```{r}
+LFC_spread %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_in_15rel0, .$Nab_in_15rel0, method='pearson')))
+```
+
+#### spearman correlation
+```{r}
+LFC_spread %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_in_15rel0, .$Nab_in_15rel0, method='spearman')))
+```
+
+#### histograms
+```{r}
+histogram_theme <- list(geom_histogram(),
+  facet_wrap(~type, scales='free'),
+  xlim(-4,4),
+  geom_hline(yintercept = 0, color='orange'),
+  geom_vline(xintercept = 0, color='orange'),
+  theme_bw())
+```
+
+```{r histograms Mex input 15}
+ggplot(LFC_spread, aes(x=Mex_in_15rel0)) +
+  histogram_theme
+```
+
+```{r histograms Nab input 15}
+ggplot(LFC_spread, aes(x=Nab_in_15rel0)) +
+  histogram_theme
+```
+
+
+### IPs
+```{r scatter Mex vs Nab ip 15}
+ggplot(LFC_spread, aes(x=Mex_ip_15rel0, y=Nab_ip_15rel0)) +
+  scatter_theme
+```
+
+#### mean and medians
+```{r}
+LFC_spread %>%
+  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0)) %>%
+  group_by(type) %>%
+  summarise(mean_mex = mean(Mex_ip_15rel0),
+            median_mex = median(Mex_ip_15rel0),
+            mean_nab = mean(Nab_ip_15rel0), 
+            median_nab = median(Nab_ip_15rel0))
+```
+
+#### pearson correlation
+```{r}
+LFC_spread %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson')))
+```
+
+#### spearman correlation
+```{r}
+LFC_spread %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman')))
+```
+
+#### histograms
+
+```{r histograms Mex ip 15}
+ggplot(LFC_spread, aes(x=Mex_ip_15rel0)) +
+  histogram_theme
+```
+
+```{r histograms Nab ip 15}
+ggplot(LFC_spread, aes(x=Nab_ip_15rel0)) +
+  histogram_theme
+```
+
+
+### IPs only gene sig over background
+
+#### load sig. enrichments
+```{r}
+load('data/DESeq2_10min_IP_rel_neg_results_df.RData', verbose=TRUE)
+
+dds_rel_neg_results_df
+```
+
+
+```{r}
+(ip_sig_over_bkgd <- filter(dds_rel_neg_results_df,
+       log2FoldChange > 0, padj < .1,
+       ) %>%
+  dplyr::select(id, comparison))
+```
+
+
+```{r}
+table(dds_rel_neg_results_df$comparison)
+```
+
+```{r}
+table(ip_sig_over_bkgd$comparison)
+```
+
+
+#### IPs only gene sig over background at 0
+
+```{r}
+ids_mex_sig0 <- filter(ip_sig_over_bkgd, comparison == 'Mex_ip_0relneg') %$% id
+
+ids_nab_sig0 <- filter(ip_sig_over_bkgd, comparison == 'Nab_ip_0relneg') %$% id
+  
+ids_both_sig0 <- intersect(ids_mex_sig0, ids_nab_sig0)
+
+length(ids_both_sig0)
+```
+
+```{r}
+LFC_spread_sig0 <- LFC_spread %>%
+  filter(id %in% ids_both_sig0)
+```
+
+```{r}
+table(LFC_spread$type)
+```
+
+```{r}
+table(LFC_spread_sig0$type)
+```
+
+
+```{r scatter Mex vs Nab ip 15 sig over bkgd 0}
+ggplot(LFC_spread_sig0, aes(x=Mex_ip_15rel0, y=Nab_ip_15rel0)) +
+    scatter_theme
+```
+
+#### mean and medians
+```{r}
+LFC_spread_sig0 %>%
+  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0)) %>%
+  group_by(type) %>%
+  summarise(mean_mex = mean(Mex_ip_15rel0),
+            median_mex = median(Mex_ip_15rel0),
+            mean_nab = mean(Nab_ip_15rel0), 
+            median_nab = median(Nab_ip_15rel0))
+```
+
+#### pearson correlation
+```{r}
+LFC_spread_sig0 %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson')))
+```
+
+#### spearman correlation
+```{r}
+LFC_spread_sig0 %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman')))
+```
+
+#### histograms
+```{r histograms Mex ip 15 sig over bkgd 0}
+ggplot(LFC_spread_sig0, aes(x=Mex_ip_15rel0)) +
+  histogram_theme
+```
+
+```{r histograms Nab ip 15 sig over bkgd 0}
+ggplot(LFC_spread_sig0, aes(x=Nab_ip_15rel0)) +
+  histogram_theme
+```
+
+
+
+#### IPs only gene sig over background at 0 and 15
+
+```{r}
+ids_sigall <- ip_sig_over_bkgd %>%
+  group_by(id) %>%
+  summarize(cnt = n()) %>%
+  filter(cnt == 4)
+
+nrow(ids_sigall)
+```
+
+```{r}
+LFC_spread_sigall <- LFC_spread %>%
+  filter(id %in% ids_sigall$id)
+```
+
+```{r}
+table(LFC_spread_sigall$type)
+```
+
+```{r scatter Mex vs Nab ip 15 sig over bkgd all}
+ggplot(LFC_spread_sigall, aes(x=Mex_ip_15rel0, y=Nab_ip_15rel0)) +
+    scatter_theme
+```
+
+#### mean and medians
+```{r}
+LFC_spread_sigall %>%
+  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0)) %>%
+  group_by(type) %>%
+  summarise(mean_mex = mean(Mex_ip_15rel0),
+            median_mex = median(Mex_ip_15rel0),
+            mean_nab = mean(Nab_ip_15rel0), 
+            median_nab = median(Nab_ip_15rel0))
+```
+
+#### pearson correlation
+```{r}
+LFC_spread_sigall %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson')))
+```
+
+#### spearman correlation
+```{r}
+LFC_spread_sigall %>%
+  group_by(type) %>%
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman')))
+```
+
+#### histograms
+```{r histograms Mex ip 15 sig over bkgd all}
+ggplot(LFC_spread_sigall, aes(x=Mex_ip_15rel0)) +
+  histogram_theme
+```
+
+```{r histograms Nab ip 15 sig over bkgd all}
+ggplot(LFC_spread_sigall, aes(x=Nab_ip_15rel0)) +
+  histogram_theme
+```
+
+
+
+```{r}
+sessionInfo()
+```
+

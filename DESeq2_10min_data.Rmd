@@ -1,0 +1,361 @@
+---
+title: "DESeq"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup, echo=TRUE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_DESeq2_10min_data/'), 
+                      dev='pdf', 
+                      echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+
+```{r load packages}
+library(tidyverse)
+library(magrittr)
+library(knitr)
+library(DESeq2)
+```
+
+
+## Load Data
+
+#### for S.pombe sizeFactors
+
+-> from file Sp_normalization.Rmd
+
+```{r}
+(Sp_10min_genes_sf <- read.table(file='data/Sp_10min_genes_sf.txt', 
+                                 col.names=c('sample', 'Sp_sf')))
+```
+
+ups: remove the 'Pap' (ie EPAP treated test run) samples for this
+
+```{r}
+Sp_10min_genes_sf %<>% filter(!grepl('Pap', sample))
+Sp_sf_10min <- Sp_10min_genes_sf$Sp_sf
+names(Sp_sf_10min) <- Sp_10min_genes_sf$sample
+
+Sp_sf_10min
+```
+
+
+
+#### load and combine S. cerevisiae
+
+ups: remove the 'Pap' (ie EPAP treated test run) samples for this
+
+```{r load and combine S cerevisiae}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph/bedtools_counts/'
+
+sfx <- '_endpm200_count_sum_per_anno.txt$'
+file_list <- dir(path) %>% keep(grepl(sfx, .) & !grepl('Pap', .))
+
+(counts_df <-
+    lapply(file_list, function(fname) {
+      read.table(paste0(path, fname, sep = ''),
+                 col.names =
+                   c('chr', 'start', 'end', 'anno', 'sum'),
+                 stringsAsFactors = FALSE) %>%
+        mutate(condition = sub(sfx, '', fname) %>%
+                 sub('_XUTs', '', .),
+               sum = ifelse(sum == '.', 0, as.numeric(sum))) %>%
+        tbl_df
+    }) %>%
+    bind_rows())
+```
+
+
+## DESeq2
+
+#### create all info for the DESeq2 run
+```{r}
+(read_df <- counts_df %>%
+  dplyr::select(anno, sum, condition) %>%
+   spread(condition, sum) %>%
+  tibble::remove_rownames(.) %>%
+  tibble::column_to_rownames(var='anno'))
+```
+
+```{r}
+(coldata <- data.frame(sample = colnames(read_df) ) %>%
+  tidyr::separate(sample, c('strain', 'fraction', 'rapa', 'rep'), by='_', remove=FALSE, fill='right') %>%
+  mutate(condition = paste0(strain, '_', fraction, '_', rapa)) %>%
+  tibble::remove_rownames(.) %>%
+  tibble::column_to_rownames(var='sample') )
+```
+
+
+#### create the DESeq2 object
+```{r}
+ddsFullCountTable <- DESeqDataSetFromMatrix(
+countData = read_df,
+colData = coldata,
+design = ~ condition)
+```
+
+#### apply S.pombe size factors
+```{r}
+colnames(ddsFullCountTable) == names(Sp_sf_10min)
+```
+
+```{r}
+sizeFactors(ddsFullCountTable) <- Sp_sf_10min
+```
+
+```{r}
+dds <-  estimateDispersions(ddsFullCountTable)
+dds <-  nbinomWaldTest(dds)
+```
+
+
+```{r}
+save(dds, file='data/DESeq2_dds_10min_Sp_sf.RData')
+```
+
+
+
+#### alt start point:
+```{r, eval = FALSE}
+load('data/DESeq2_dds_10min_Sp_sf.RData')
+```
+
+
+
+## Differential expression
+
+#### comparisons
+```{r}
+comparisons <- list(
+  c('Mex_in_15', 'Mex_in_0'),
+  c('Mex_ip_15', 'Mex_ip_0'),
+  c('Nab_in_15', 'Nab_in_0'),
+  c('Nab_ip_15', 'Nab_ip_0')
+)
+
+names(comparisons) <- c('Mex_in_15rel0',
+  'Mex_ip_15rel0', 
+  'Nab_in_15rel0', 
+  'Nab_ip_15rel0')
+```
+
+
+```{r}
+dds_results <- lapply(comparisons, function(comp) results(dds, contrast=c('condition', comp)))
+```
+
+
+#### MA plots of these
+```{r MA plots}
+lapply(seq_along(dds_results), function(i) plotMA(dds_results[[i]], main=names(dds_results)[i]))
+```
+
+
+
+#### Results to one tbl_df
+
+Collect into one large dataframe
+```{r}
+(dds_results_df <- lapply(seq_along(dds_results), function(i) dds_results[[i]] %>% 
+  data.frame %>% 
+  tibble::rownames_to_column(var='anno') %>% 
+  mutate(comparison = names(dds_results)[i])) %>%
+  bind_rows %>%
+  tbl_df)
+```
+
+separate full annotations
+and fix the XUTs that were annotated differently ...
+```{r}
+dds_results_df %<>%
+  separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+  mutate(name = ifelse(id =='XUT', type, name),
+         type = ifelse(id =='XUT', id, type),
+         id = ifelse(id =='XUT', name, id)) 
+```
+
+
+```{r}
+save(dds_results_df, file='data/DESeq2_10min_results_df.RData')
+```
+
+
+
+#### MA plots with type etc....
+
+```{r MA plots per type}
+dds_results_df %>%
+  mutate(sig = (padj < .1 & !is.na(padj))) %>%
+  ggplot(., aes(x=baseMean, y=log2FoldChange, color=sig)) +
+  geom_point(size=.1, alpha=.5) +
+  scale_x_log10() +
+  geom_hline(yintercept = 0) +
+  scale_color_manual(values = c("darkgray", "red")) + 
+  facet_grid(type~comparison) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1),
+        strip.text.x = element_text(size=6)
+        )
+```
+
+
+
+
+
+
+## IP rel input
+
+#### comparisons
+```{r}
+comparisons <- list(
+  c('Mex_ip_0', 'Mex_in_0'),
+  c('Nab_ip_0', 'Nab_in_0')
+)
+
+names(comparisons) <- c('Mex_0_ip_rel_in',
+  'Nab_0_ip_rel_in')
+```
+
+
+```{r}
+dds_ip_rel_in <- lapply(comparisons, function(comp) results(dds, contrast=c('condition', comp)))
+```
+
+
+#### MA plots of these
+```{r MA plots ip rel input}
+lapply(seq_along(dds_ip_rel_in), function(i) plotMA(dds_ip_rel_in[[i]], main=names(dds_ip_rel_in)[i]))
+```
+
+
+
+#### Results to one tbl_df
+
+Collect into one large dataframe
+```{r}
+(dds_ip_rel_in_df <- lapply(seq_along(dds_ip_rel_in), function(i) dds_ip_rel_in[[i]] %>% 
+  data.frame %>% 
+  tibble::rownames_to_column(var='anno') %>% 
+  mutate(comparison = names(dds_ip_rel_in)[i])) %>%
+  bind_rows %>%
+  tbl_df)
+```
+
+separate full annotations
+and fix the XUTs that were annotated differently ...
+```{r}
+dds_ip_rel_in_df %<>%
+  separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+  mutate(name = ifelse(id =='XUT', type, name),
+         type = ifelse(id =='XUT', id, type),
+         id = ifelse(id =='XUT', name, id)) 
+```
+
+
+```{r}
+save(dds_ip_rel_in_df, file='data/DESeq2_10min_ip_rel_input_results_df.RData')
+```
+
+
+
+#### MA plots with type etc....
+
+```{r MA plots ip rel input per type}
+dds_ip_rel_in_df %>%
+  mutate(sig = (padj < .1 & !is.na(padj))) %>%
+  ggplot(., aes(x=baseMean, y=log2FoldChange, color=sig)) +
+  geom_point(size=.1, alpha=.5) +
+  scale_x_log10() +
+  geom_hline(yintercept = 0) +
+  scale_color_manual(values = c("darkgray", "red")) + 
+  facet_grid(type~comparison) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1),
+        strip.text.x = element_text(size=6)
+        )
+```
+
+
+
+## Differential enrichment IP sig over neg IP
+
+#### comparisons
+```{r}
+comparisons <- list(
+  c('Mex_ip_0', 'Mex_ip_neg'),
+  c('Mex_ip_15', 'Mex_ip_neg'),
+  c('Nab_ip_0', 'Nab_ip_neg'),
+  c('Nab_ip_15', 'Nab_ip_neg')
+)
+
+names(comparisons) <- c('Mex_ip_0relneg',
+  'Mex_ip_15relneg', 
+  'Nab_ip_0relneg', 
+  'Nab_ip_15relneg')
+```
+
+
+```{r}
+dds_rel_neg <- lapply(comparisons, function(comp) results(dds, contrast=c('condition', comp)))
+```
+
+
+#### Results to one tbl_df
+
+Collect into one large dataframe
+```{r}
+(dds_rel_neg_results_df <- lapply(seq_along(dds_rel_neg), function(i) dds_rel_neg[[i]] %>% 
+  data.frame %>% 
+  tibble::rownames_to_column(var='anno') %>% 
+  mutate(comparison = names(dds_rel_neg)[i])) %>%
+  bind_rows %>%
+  tbl_df)
+```
+
+separate full annotations
+and fix the XUTs that were annotated differently ...
+```{r}
+dds_rel_neg_results_df %<>%
+  separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+  mutate(name = ifelse(id =='XUT', type, name),
+         type = ifelse(id =='XUT', id, type),
+         id = ifelse(id =='XUT', name, id)) 
+```
+
+
+```{r}
+save(dds_rel_neg_results_df, file='data/DESeq2_10min_IP_rel_neg_results_df.RData')
+```
+
+
+
+#### MA plots IP rel neg with type etc....
+
+```{r MA plots IP rel neg per type}
+dds_rel_neg_results_df %>%
+  mutate(sig = (padj < .1 & !is.na(padj))) %>%
+  ggplot(., aes(x=baseMean, y=log2FoldChange, color=sig)) +
+  geom_point(size=.1, alpha=.5) +
+  scale_x_log10() +
+  geom_hline(yintercept = 0) +
+  scale_color_manual(values = c("darkgray", "red")) + 
+  facet_grid(type~comparison) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1),
+        strip.text.x = element_text(size=6)
+        )
+```
+
+--> very good enrichment of essentially all classes and experiments...
+
+```{r}
+sessionInfo()
+```
+

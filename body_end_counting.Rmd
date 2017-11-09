@@ -5,20 +5,8 @@ output: html_document
 ---
 `r format(Sys.time(), "%d %B, %Y")`
 
-```{r setup}
-knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_counting/', dev='pdf')
-```
 
-```{r, message=FALSE,warning=FALSE}
-suppressWarnings(library('tidyverse'))
-suppressWarnings(library('magrittr'))
-suppressWarnings(library('knitr'))
-suppressWarnings(library('broom'))
-
-```
-
-
-# Create body and end annotations for Steinmetz transcription units
+## Create body and end annotations for Steinmetz transcription units
 
 Define gene body region: TSS to TES-200bp
 Define gene end region: TES+/-200bp
@@ -37,10 +25,12 @@ Body and ends are derived using awk and bedtools
 ########################################################################################################################
 
 
-# annotations for body and end counts
+# annotations for body and end regions
 bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+
 awk '{OFS="\t"}{if($6=="+"){$3-=200;if(($3-$2)>100) print $0}}' $bed | cut -f1-4 > ${bed/.bed/_body_endsm200_plus.bed}
 awk '{OFS="\t"}{if($6=="-"){$2+=200;if(($3-$2)>100) print $0}}' $bed | cut -f1-4 > ${bed/.bed/_body_endsm200_minus.bed}
+
 awk '{OFS="\t"}{if($6=="+"){$2=$3-200;$3+=200; print $0}}' $bed | cut -f1-4 > ${bed/.bed/_ends_pm200_plus.bed}
 awk '{OFS="\t"}{if($6=="-"){$3=$2+200;$2-=200; print $0}}' $bed | cut -f1-4 > ${bed/.bed/_ends_pm200_minus.bed}
 
@@ -77,13 +67,19 @@ head -3 ${bed/.bed/_ends_pm200_minus.bed}
 ```
 
 
+
+### remove overlaps from gene body annotations
+
 Original Steinmetz annotations never overlap on the same strand. Here I extend the ends by 200bp so overlaps are likely to occur. Since gene end reads dominate in those libraries, we don't want to count overlapping "gene end" regions as "gene body." Hence we remove all ends+/-200bp covered regions from gene body regions.  
 
 
 First inspect the overlaps:  
 ```{bash, eval = FALSE}
+bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+
 ##inspect the overlaps
 bedtools intersect -wo -a ${bed/.bed/_body_endsm200_plus.bed} -b ${bed/.bed/_ends_pm200_plus.bed} > body_vs_end_intersect_plus.txt
+
 bedtools intersect -wo -a ${bed/.bed/_body_endsm200_minus.bed} -b ${bed/.bed/_ends_pm200_minus.bed} > body_vs_end_intersect_minus.txt
 
 head body_vs_end_intersect_plus.txt
@@ -126,9 +122,10 @@ wc -l ${bed/.bed/_body_endsm200_minus.bed}
 --> roughly 1/3 of all body regions have overlapping end regions!  
 
 
-
 #### filter out ends_pm200 from body annotations:  
 ```{bash, eval = FALSE}
+bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+
 bedtools subtract -a ${bed/.bed/_body_endsm200_plus.bed} -b ${bed/.bed/_ends_pm200_plus.bed} > ${bed/.bed/_body_endsm200_cleaned_plus.bed}
 bedtools subtract -a ${bed/.bed/_body_endsm200_minus.bed} -b ${bed/.bed/_ends_pm200_minus.bed} > ${bed/.bed/_body_endsm200_cleaned_minus.bed}
 
@@ -164,9 +161,11 @@ grep ST3640 ${bed/.bed/_body_endsm200_cleaned_minus.bed}
 ```
 
 
-#### inspection of the cleaned annotation
+#### inspection of the cleaned gene body annotation
 
 ```{bash, eval = FALSE}
+bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+
 ### total nr of regions
 wc -l ${bed/.bed/_body_endsm200_cleaned_plus.bed}
 #    3359 /Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/Steinmetz_annotations_sacCer3_latin_body_endsm200_cleaned_plus.bed
@@ -184,28 +183,112 @@ cat ${bed/.bed/_body_endsm200_minus.bed} | awk '{sum+=($3-$2)}END{print sum}'
 #4720823
 cat ${bed/.bed/_body_endsm200_cleaned_minus.bed} | awk '{sum+=($3-$2)}END{print sum}'
 #4594953
-```
---> lost some 200000 bp of body annotations by this overlap cleaning.  
+
+#--> lost some 200000 bp of body annotations by this overlap cleaning.  
 
 
 #### how many body regions are "split apart" ?
-```{bash, eval = FALSE}
+
 ##how many body regions are "split apart" ?
-cat ${bed/.bed/_body_endsm200_plus.bed} | cut -f 4 | uniq -c | grep -v "  1"
+cat ${bed/.bed/_body_endsm200_cleaned_plus.bed} | cut -f 4 | uniq -c | grep -v "  1"
 ##no output, ie 0
-cat ${bed/.bed/_body_endsm200_minus.bed} | cut -f 4 | uniq -c | grep -v "  1"
+cat ${bed/.bed/_body_endsm200_cleaned_minus.bed} | cut -f 4 | uniq -c | grep -v "  1"
 ##no output ie 0
+
+# --> none!  
+# This may at least have happened some times, but explanation is the Steinmetz annotations are NEVER overlapping on the same strand... if an end region is overlapping due to 200bp extension, its only overlapping at one edge and never internally.
 ```
---> none!  
-This may at least have happened some times, but explanation is the Steinmetz annotations are NEVER overlapping on the same strand... if an end region is overlapping due to 200bp extension, its only overlapping at one edge and never internally.
+
+
+### remove overlaps from gene end annotations
+
+Even though Steinmetz annotations never overlap, the extended gene ends can overlap with each other.
+
+#### trim overlapping extended ends
+```{bash, eval = FALSE}
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
+
+bedtools intersect -wo -a $ends_plus_bed -b $ends_plus_bed | awk '$4 != $8' | head -4
+#chrI	143237	143637	ST0034:ORF-T:YAL003W,:snR18	chrI	143397	143797	ST0035:CUTs:CUT003:CUT003	240
+#chrI	143397	143797	ST0035:CUTs:CUT003:CUT003	chrI	143237	143637	ST0034:ORF-T:YAL003W,:snR18	240
+#chrII	254674	255074	ST0107:SUTs:SUT011:SUT011	chrII	254858	255258	ST0108:CUTs:CUT009:CUT009	216
+#chrII	254858	255258	ST0108:CUTs:CUT009:CUT009	chrII	254674	255074	ST0107:SUTs:SUT011:SUT011	216
+
+bedtools intersect -wo -a $ends_plus_bed -b $ends_plus_bed | awk '$4 != $8' | wc -l
+# 258
+
+bedtools intersect -wo -a $ends_minus_bed -b $ends_minus_bed | awk '$4 != $8' | wc -l
+# 246
+
+# 502 overlaps for the 7272 total annotations
+
+
+### strip overlaps using a compromize shifting the border exatly in the middle between the 2 ends
+awk '
+{
+  if($1==last_chr && last_end>$2){
+    overlap=(last_end-$2);
+    last_end-=(overlap/2);
+    $2=last_end;
+  };
+  if(last_chr != ""){
+    printf "%s\t%i\t%i\t%s\n",last_chr,last_start,last_end,last_anno; 
+  };
+  last_chr=$1; last_start=$2; last_end=$3; last_anno=$4
+}END{
+  printf "%s\t%i\t%i\t%s\n",last_chr,last_start,last_end,last_anno;
+}' $ends_plus_bed > ${ends_plus_bed/_plus.bed/_cleaned_plus.bed}
+
+awk '
+{
+  if($1==last_chr && last_end>$2){
+    overlap=(last_end-$2);
+    last_end-=(overlap/2);
+    $2=last_end;
+  };
+  if(last_chr != ""){
+    printf "%s\t%i\t%i\t%s\n",last_chr,last_start,last_end,last_anno; 
+  };
+  last_chr=$1; last_start=$2; last_end=$3; last_anno=$4
+}END{
+  printf "%s\t%i\t%i\t%s\n",last_chr,last_start,last_end,last_anno;
+}' $ends_minus_bed > ${ends_minus_bed/_minus.bed/_cleaned_minus.bed}
+
+
+### sanity check that no overlaps are left
+bedtools intersect -wo -a ${ends_plus_bed/_plus.bed/_cleaned_plus.bed} -b ${ends_plus_bed/_plus.bed/_cleaned_plus.bed} | awk '$4 != $8' | wc -l
+# 0
+
+bedtools intersect -wo -a ${ends_minus_bed/_minus.bed/_cleaned_minus.bed} -b ${ends_minus_bed/_minus.bed/_cleaned_minus.bed} | awk '$4 != $8' | wc -l
+# 0
+
+
+##how many total bases removed ??
+awk '{sum += ($3-$2)}END{print sum}' $ends_plus_bed
+#1453200
+
+awk '{sum += ($3-$2)}END{print sum}' $ends_minus_bed
+#1455600
+
+awk '{sum += ($3-$2)}END{print sum}' ${ends_plus_bed/_plus.bed/_cleaned_plus.bed}
+#1431480
+
+awk '{sum += ($3-$2)}END{print sum}' ${ends_minus_bed/_minus.bed/_cleaned_minus.bed}
+#1435112
+
+## --> very little of the total ~ 3 Mb; ie ~ 40kb ie ~1.5%
+```
 
 
 final sorting:  
 ```{bash, eval = FALSE}
+bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+
 body_plus_bed=${bed/.bed/_body_endsm200_cleaned_plus.bed}
 body_minus_bed=${bed/.bed/_body_endsm200_cleaned_minus.bed}
-ends_plus_bed=${bed/.bed/_ends_pm200_plus.bed}
-ends_minus_bed=${bed/.bed/_ends_pm200_minus.bed}
+ends_plus_bed=${ends_plus_bed/_plus.bed/_cleaned_plus.bed}
+ends_minus_bed=${ends_minus_bed/_minus.bed/_cleaned_minus.bed}
 
 #final sort for later use
 sort -k1,1 -k2,2n ${body_plus_bed} -o ${body_plus_bed}
@@ -215,7 +298,8 @@ sort -k1,1 -k2,2n ${ends_minus_bed} -o ${ends_minus_bed}
 ```
 
 
-#### number of genomic pA masked sites in each body and end region
+### number of genomic pA masked sites in each body and end region
+
 Using this little script *bed_count_positions.sh*:  
 ```{bash, eval = FALSE}
 #!/usr/bin/env bash
@@ -244,10 +328,12 @@ awk '{
 ```
 
 ```{bash, eval = FALSE}
+bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+
 body_plus_bed=${bed/.bed/_body_endsm200_cleaned_plus.bed}
 body_minus_bed=${bed/.bed/_body_endsm200_cleaned_minus.bed}
-ends_plus_bed=${bed/.bed/_ends_pm200_plus.bed}
-ends_minus_bed=${bed/.bed/_ends_pm200_minus.bed}
+ends_plus_bed=${bed/.bed/_ends_pm200_cleaned_plus.bed}
+ends_minus_bed=${bed/.bed/_ends_pm200_cleaned_minus.bed}
 
 ## count of genomic A-masked sites per annotation
 pA_sites_plus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus.bed"
@@ -283,7 +369,7 @@ ${ends_minus_bed/_minus.bed/_minus_pAfilter.counts} > \
 
 
 
-# Create body and end annotations for Wery et al XUTs
+## Create body and end annotations for Wery et al XUTs
 
 #### Prepare XUT annotations from Wery et al., MolCell 2016
 ```{bash, eval = FALSE}
@@ -400,15 +486,17 @@ wc -l GSE69384_SUTs_minus_XUTs.bed
 ```{bash, eval = FALSE}
 #### XUTs
 XUTs="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs.bed"
-cleanXUTs="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_nonoverlappingXUTs.bed"
+
 awk '{OFS="\t"}{if($6=="+"){$3-=200;if(($3-$2)>100) print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_body_endsm200_plus.bed}
 awk '{OFS="\t"}{if($6=="-"){$2+=200;if(($3-$2)>100) print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_body_endsm200_minus.bed}
+
 awk '{OFS="\t"}{if($6=="+"){$2=$3-200;$3+=200; print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_ends_pm200_plus.bed}
 awk '{OFS="\t"}{if($6=="-"){$3=$2+200;$2-=200; print $0}}' $XUTs | grep ^chr | cut -f1-4 > ${XUTs/.bed/_ends_pm200_minus.bed}
 
 
-##subtract XUT bodies overlapping XUT ends
+##subtract from XUT bodies regions overlapping XUT or Steinmetz annotation ends
 bedtools subtract -a ${XUTs/.bed/_body_endsm200_plus.bed} -b ${XUTs/.bed/_ends_pm200_plus.bed} > ${XUTs/.bed/_body_endsm200_cleaned_plus.bed}
+
 bedtools subtract -a ${XUTs/.bed/_body_endsm200_minus.bed} -b ${XUTs/.bed/_ends_pm200_minus.bed} > ${XUTs/.bed/_body_endsm200_cleaned_minus.bed}
 
 wc -l ${XUTs/.bed/_body_endsm200_cleaned_plus.bed}
@@ -419,6 +507,35 @@ wc -l ${XUTs/.bed/_body_endsm200_minus.bed}
 #     703 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_minus.bed
 wc -l ${XUTs/.bed/_body_endsm200_cleaned_minus.bed}
 #     699 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_minus.bed
+
+### remove XUT bodies that overlap Steinmetz gene ends
+Steinmetz_ends_plus="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_plus.bed"
+Steinmetz_ends_minus="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_minus.bed"
+
+bedtools subtract -A -a ${XUTs/.bed/_body_endsm200_cleaned_plus.bed} -b ${Steinmetz_ends_plus} > ${XUTs/.bed/_body_endsm200_cleaned2x_plus.bed}
+
+bedtools subtract -A -a ${XUTs/.bed/_body_endsm200_cleaned_minus.bed} -b ${Steinmetz_ends_minus} > ${XUTs/.bed/_body_endsm200_cleaned2x_minus.bed}
+
+wc -l ${XUTs/.bed/_body_endsm200_cleaned2x_plus.bed}
+#     490 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_plus.bed
+
+wc -l ${XUTs/.bed/_body_endsm200_cleaned2x_minus.bed}
+#     463 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_minus.bed
+
+
+
+## remove XUTs end regions overlapping any Steinmetz ends
+XUTs_ends_plus=${XUTs/.bed/_ends_pm200_plus.bed}
+XUTs_ends_minus=${XUTs/.bed/_ends_pm200_minus.bed}
+
+
+bedtools subtract -A -a $XUTs_ends_plus -b $Steinmetz_ends_plus > ${XUTs_ends_plus/_plus.bed/_cleaned_plus.bed}
+wc -l ${XUTs_ends_plus/_plus.bed/_cleaned_plus.bed}
+#     604 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_plus.bed
+
+bedtools subtract -A -a $XUTs_ends_minus -b $Steinmetz_ends_minus > ${XUTs_ends_minus/_minus.bed/_cleaned_minus.bed}
+wc -l ${XUTs_ends_minus/_minus.bed/_cleaned_minus.bed}
+#     561 /Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_minus.bed
 
 ```
 
@@ -432,21 +549,22 @@ wc -l ${XUTs/.bed/_body_endsm200_cleaned_minus.bed}
 pA_sites_plus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus_Sc.bed"
 pA_sites_minus="/Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_minus_Sc.bed"
 
-body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_plus.bed"
-body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_minus.bed"
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_minus.bed"
+
 
 ## count of genomic A-masked sites for cleaned gene body regions
 bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
-${body_plus_bed} ${pA_sites_plus} ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts}
+${body_plus_bed} ${pA_sites_plus} ${body_plus_bed/_cleaned2x_plus.bed/_cleaned_plus_pAfilter.counts}
 
 bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count_positions.sh \
-${body_minus_bed} ${pA_sites_minus} ${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts}
+${body_minus_bed} ${pA_sites_minus} ${body_minus_bed/_cleaned2x_minus.bed/_cleaned_minus_pAfilter.counts}
 
-cat ${body_plus_bed/_cleaned_plus.bed/_cleaned_plus_pAfilter.counts} \
-${body_minus_bed/_cleaned_minus.bed/_cleaned_minus_pAfilter.counts} > \
-/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_body_pAfilter.counts
+cat ${body_plus_bed/_cleaned2x_plus.bed/_cleaned_plus_pAfilter.counts} \
+${body_minus_bed/_cleaned2x_minus.bed/_cleaned_minus_pAfilter.counts} > \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned2x_body_pAfilter.counts
 
 
 
@@ -459,8 +577,10 @@ ${ends_minus_bed} ${pA_sites_minus} ${ends_minus_bed/_minus.bed/_minus_pAfilter.
 
 cat ${ends_plus_bed/_plus.bed/_plus_pAfilter.counts} \
 ${ends_minus_bed/_minus.bed/_minus_pAfilter.counts} > \
-/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_ends_pAfilter.counts
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned_ends_pAfilter.counts
 ```
+
+
 
 
 # counting
@@ -495,18 +615,25 @@ sort -k1,1 -k2,2n | \
 bedtools map -a $1 -b - -c $3 -o sum > $4
 ```
 
-#### counting raw reads files
-```{bash, eval = FALSE}
-#### NON-NORMALIZED FILES
 
-body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
-body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
+
+## counting 10min data
+
+For the 10min data everything is only regular pA+ data -> only count gene ends.
+
+--> for DESeq2, cound non-normalized reads
+
+```{bash, eval = FALSE}
+#### NON-NORMALIZED FILES x ORF, CUTs, SUTs and snRNAs ("Steinmetz (Xu et al.) annotations")
+
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_minus.bed"
+
+mkdir bedtools_counts
 
 
 # A-filtered count files
-cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph
 
 for f in *plus_KevinRoyAfiltered.bedgraph
   do
@@ -522,38 +649,58 @@ for f in *plus_KevinRoyAfiltered.bedgraph
      cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
      bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_anno.txt}
 
-     echo " body reads counting"
-     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+     echo " done"
+  done
 
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+
+
+#### NON-NORMALIZED FILES x XUTs ("Morillon (Wery et al) annotations")
+
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_minus.bed"
+
+# A-filtered count files
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph
+
+for f in *plus_KevinRoyAfiltered.bedgraph
+  do
+     echo $f
+     echo " end reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+
+     fminus="${f/_plus/_minus}"
      echo "  ${fminus}"
-     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
 
-     echo "  merging body"
-     cat plus_gene_body.counts minus_gene_body.counts > \
-     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
+     echo "  merging ends"
+     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_XUTs_endpm200_count_sum_per_anno.txt}
 
      echo " done"
   done
 
 rm plus_gene_endpm200.counts
 rm minus_gene_endpm200.counts
-rm plus_gene_body.counts
-rm minus_gene_body.counts
-
-
 ```
 
 
-#### counting Sp-normalized files
+
+## counting 2min data
+
+in this case we are not doing any count-based analysis  
+-> count directly the normalized reads
+
 ```{bash, eval=FALSE}
 ## NORMALIZED to S.pombe track files
-cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
 
 #### annotation files
 body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
 body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_minus.bed"
 
 #### counts for input FILES
 for f in *input*_plus_KevinRoyAfiltered.bedgraph
@@ -653,15 +800,17 @@ rm plus_gene_body.counts
 rm minus_gene_body.counts
 ```
 
-#### body and end counting Sp-normalized files for XUTs
+
+#### body and end counting XUTs
 
 ```{bash, eval = FALSE}
 #### NORMALIZED to S.pombe input FILES
 
-body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_plus.bed"
-body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_minus.bed"
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_minus.bed"
+
 
 # A-filtered bigwigs location
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
@@ -678,7 +827,8 @@ for f in *input*_plus_KevinRoyAfiltered.bedgraph
 
     echo "  merging ends"
     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
-    bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_XUT.txt}
+    bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_XUTs_endpm200_cleaned_count_sum_per_anno.txt}
+  
 
     echo " body reads counting"
     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
@@ -688,7 +838,7 @@ for f in *input*_plus_KevinRoyAfiltered.bedgraph
 
     echo "  merging body"
     cat plus_gene_body.counts minus_gene_body.counts > \
-    bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_XUT.txt}
+    bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_XUTs_body_endsm200_cleaned2x_count_sum_per_anno.txt}
 
     echo " done"
   done
@@ -714,7 +864,7 @@ for f in *ip*_plus_KevinRoyAfiltered_BGsub.bedgraph
 
     echo "merging ends"
     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
-    bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_endpm200_count_sum_per_XUT.txt}
+    bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_XUTs_endpm200_cleaned_count_sum_per_anno.txt}
 
     echo "body reads counting"
     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
@@ -722,7 +872,7 @@ for f in *ip*_plus_KevinRoyAfiltered_BGsub.bedgraph
 
     echo "merging body"
     cat plus_gene_body.counts minus_gene_body.counts > \
-    bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_body_endsm200_cleaned_count_sum_per_XUT.txt}
+    bedtools_counts/${f/_plus_KevinRoyAfiltered_BGsub.bedgraph/_BGsub_XUTs_body_endsm200_cleaned2x_count_sum_per_anno.txt}
 
     echo "done"
   done
@@ -735,852 +885,6 @@ rm minus_gene_body.counts
 
 
 
-
-
-
-#### counting pA-masked files
-```{bash, eval=FALSE}
-## NORMALIZED to S.pombe and pAplus masked track files
-cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
-
-#### annotation files
-body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
-body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
-ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_plus.bed"
-ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_minus.bed"
-
-#### pAmasked NORMALIZED to S.pombe FILES
-for f in only_pAminus_positions/*_plus_*_wo_noPaP_0rapa_sites.bedgraph
-  do
-     fminus="${f/_plus/_minus}"
-     echo "plus strand file "$f
-     echo "minus strand file "$fminus
-
-     echo "end reads counting"
-     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
-     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
-
-     echo "merging ends"
-     outfile=$(echo $f | sed s/_plus_KevinRoyAfiltered//g | sed s/_wo_noPaP_0rapa_sites.bedgraph//g | sed s/only_pAminus_positions\\///g | sed s/xPap/xPappAmasked/g)
-     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
-     bedtools_counts/${outfile}_endpm200_count_sum_per_anno.txt
-
-     echo "body reads counting"
-     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
-     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
-
-     echo "merging body"
-     cat plus_gene_body.counts minus_gene_body.counts > \
-     bedtools_counts/${outfile}_body_endsm200_cleaned_count_sum_per_anno.txt
-
-     echo "done"
-  done
-
-rm plus_gene_endpm200.counts
-rm minus_gene_endpm200.counts
-rm plus_gene_body.counts
-rm minus_gene_body.counts
-```
-
-
-
-
-# Load counts into R
-
-```{r}
-read_bedgraph_sums <- function(path, file_list, sfx) {
-  lapply(file_list, function(fname) {read.table(paste0(path,fname,sep=''), header=F, col.names=c('chr', 'start', 'end', 'id', 'sum'), stringsAsFactors = FALSE) %>% 
-      tbl_df %>%
-  mutate(condition = sub(sfx, '', fname),
-         condition = sub('norm_', '', condition),
-         sum = ifelse(sum == '.', 0, as.numeric(sum)))}) %>%
-  bind_rows()
-}
-```
-
-
-
-## raw counts
-
-#### load and combine end counts
-```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/bedtools_counts/'
-sfx <- '_endpm200_count_sum_per_anno.txt$'
-
-file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list
-```
-
-
-```{r, warning=FALSE}
-(end_counts_df <- read_bedgraph_sums(path, file_list, sfx))
-```
-
-
-#### load and combine body counts
-```{r}
-sfx <- '_body_endsm200_cleaned_count_sum_per_anno.txt$'
-
-file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list
-```
-
-```{r, warning=FALSE}
-(body_counts_df <- read_bedgraph_sums(path, file_list, sfx))
-```
-
-
-#### combine body and end 
-
-```{r}
-(raw_counts_df <- bind_rows(mutate(body_counts_df, part = 'body'), 
-                     mutate(end_counts_df, part = 'end')) %>%
-   mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
-                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
-                         TRUE ~ '??')))
-```
-
-
-```{r}
-save(raw_counts_df, file='data/raw_signal_body_end_all.RData')
-```
-
-
-## Sp-normalized counts
-
-#### load and combine end counts
-```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
-sfx <- '_endpm200_count_sum_per_anno.txt$'
-
-file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list
-```
-
-
-```{r, warning=FALSE}
-(end_counts_df <- read_bedgraph_sums(path, file_list, sfx))
-```
-
-
-#### load and combine body counts
-```{r}
-sfx <- '_body_endsm200_cleaned_count_sum_per_anno.txt$'
-
-file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list
-```
-
-```{r, warning=FALSE}
-(body_counts_df <- read_bedgraph_sums(path, file_list, sfx))
-```
-
-
-#### combine body and end 
-
-```{r}
-(both_df <- bind_rows(mutate(body_counts_df, part = 'body'), 
-                     mutate(end_counts_df, part = 'end')) %>%
-   mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
-                         grepl('^xPappAminus', .$condition) ~ 'pA-',
-                         grepl('^xPappAmasked', .$condition) ~ 'pA-X',
-                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
-                         TRUE ~ 'NA')))
-```
-
-
-```{r}
-save(both_df, file='data/norm_signal_body_end_raw_all.RData')
-```
-
-
-## Sp-normalized counts for XUTs
-
-#### load and combine end counts
-```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
-sfx <- '_endpm200_count_sum_per_XUT.txt$'
-
-file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list
-```
-
-
-```{r, warning=FALSE}
-(end_counts_df <- read_bedgraph_sums(path, file_list, sfx))
-```
-
-
-#### load and combine body counts
-```{r}
-sfx <- '_body_endsm200_cleaned_count_sum_per_XUT.txt$'
-
-file_list <- dir(path)[grep(sfx, dir(path))]
-
-file_list
-```
-
-```{r, warning=FALSE}
-(body_counts_df <- read_bedgraph_sums(path, file_list, sfx))
-```
-
-
-#### combine body and end 
-
-```{r}
-(XUTs_both_df <- bind_rows(mutate(body_counts_df, part = 'body'), 
-                     mutate(end_counts_df, part = 'end')) %>%
-   mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
-                         grepl('^xPappAminus', .$condition) ~ 'pA-',
-                         grepl('^xPappAmasked', .$condition) ~ 'pA-X',
-                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
-                         TRUE ~ 'NA')))
-```
-
-
-```{r}
-save(XUTs_both_df, file='data/norm_signal_XUTs_body_end_raw_all.RData')
-```
-
-
-## Sanity check S.pombe normalization
-
-simply checks that $SpombeNormCounts = RawCounts / SpombeSizeFactor$  
-
-#### Load the S.pombe size factors
-```{r}
-(sf <- read.table('data/Sp_genes_sf.txt', col.names=c('condition', 'sf')) %>%
-  tbl_df)
-```
-
-
-#### check it
-```{r}
-(raw_vs_norm <- left_join(raw_counts_df %>%
-  dplyr::rename(raw_reads = sum),
-  sf) %>%
-  left_join(., both_df %>%
-  dplyr::rename(norm_reads = sum)))
-```
-
-
-```{r}
-raw_vs_norm %>%
-  mutate(rel_diff = ( (raw_reads/sf) - norm_reads ) / norm_reads ) %>%
-  group_by(condition, part, pA) %>%
-  do(tidy(summary(.$rel_diff))) %>%
-  arrange(maximum) %>%
-  kable
-```
-
-apparently its not exactly but very close values ...
-
--> can see that maximum relative difference at a single feature between norm and recomputed normalized is around 4E-6, ie 4 in a million, aka .0004%.
--> its roughly stable between all libraries so appears to be a rounding thingy
-
-
-```{r}
-mutate(raw_vs_norm, re_norm_reads = raw_reads/sf) %>%
-  group_by(condition, part) %>%
-  do(tidy(cor(.$norm_reads, .$re_norm_reads))) %>%
-  kable
-```
-
-seems to be perfectly correlated.  
-
-
-
-## Sanity check BGsub and pA minus method
-
-
-simply checks that 
-1. norm. counts for $BGsub = normIP  -  normnegativeIP$  
-2. norm. counts for $pAminus = pAplusandminus  -  pAplus$
-
-
-#### BGsub
-
-```{r}
-IP_raw <- filter(both_df, grepl('ip', condition) & !(grepl('BGsub', condition))) %>%
-  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop')
-
-IP_neg <- filter(both_df, grepl('ip_neg0', condition)) %>%
-  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
-  dplyr::select(-rapa, -rep) %>%
-  dplyr::rename(ip_neg_sum = sum)
-
-IP_BGsub <- filter(both_df, grepl('ip', condition) & (grepl('BGsub', condition))) %>%
-  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
-  dplyr::rename(BGsub_sum = sum)
-```
-
-
-```{r}
-IP_BGsub_redone <- left_join(IP_raw, IP_neg) %>%
-  mutate(BGsub_sum_redone = sum - ip_neg_sum) %>%
-  dplyr::select(-sum, -ip_neg_sum)
-```
-
-```{r}
-(BGsub_comparison <- left_join(IP_BGsub_redone, IP_BGsub) %>%
-   mutate(relative_error = (BGsub_sum_redone-BGsub_sum)/BGsub_sum))
-```
-
-```{r}
-BGsub_comparison %>%
-  filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
-  group_by(pA, part, Pap, strain, rapa, rep) %>%
-  #summarize(cnt=n()) %>% kable
-  do(tidy(cor.test(.$BGsub_sum, .$BGsub_sum_redone))) %>%
-  kable
-```
-
-```{r}
-BGsub_comparison %>%
-  filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
-  group_by(pA, part, Pap, strain, rapa, rep) %>%
-  do(tidy(summary(.$relative_error))) %>% 
-  kable
-```
-
---> perfectly correlated and same values
---> OK
-
-
-## work only with BGsub IPs
-
-```{r}
-(both_df %<>% 
-  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
-  separate(id, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-  filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
-  dplyr::select(-BGsub))
-```
-
-```{r}
-(XUTs_both_df %<>% 
-  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
-  separate(id, c('type', 'id'), sep=':') %>%
-  filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
-  dplyr::select(-BGsub))
-```
-
-
-## Normalize reads to region length and correct for genomic A masked positions
-
-#### Original plain annotations
-```{r}
-(anno <- read.table("/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed", col.names = c('chr', 'start', 'end', 'anno', 'pad', 'strand')) %>%
-  tbl_df %>% 
-   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-  mutate(type = ifelse(grepl('^snR', name), 'snRNA', as.character(type)),
-         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'snRNA', 'other'))) %>%
-   arrange(id))
-```
-
-
-
-### cleaned region lengths and A-masked positions
-
-Note: for body regions stripped for overlapping ends, end regions are all 400bp. This info is contained in the A-mask count files.
-
-A-masked positions: nothing will ever be counted from those positions, so in practice these positions do not count to the length of each region -> subtract them:  
-```{r}
-(effective_body_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
-   tbl_df %>%
-   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-   mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
-```
-
-```{r}
-(effective_body_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
-   tbl_df %>%
-   separate(anno, c('type', 'id'), sep=':') %>%
-   mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
-```
-
-```{r}
-(effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
-   tbl_df %>%
-   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-   mutate(pAfiltered_end_len = end - start - end_pA_masked))
-```
-
-```{r}
-(effective_end_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
-   tbl_df %>%
-   separate(anno, c('type', 'id'), sep=':') %>%
-   mutate(pAfiltered_end_len = end - start - end_pA_masked))
-```
-
-
-#### combine all of the above
-
-```{r}
-(effective_lens <- full_join(
-  dplyr::select(effective_body_len, id, pAfiltered_cleaned_body_len),
-  dplyr::select(effective_end_len, id, pAfiltered_end_len)) %>%
-   arrange(id)
-  )
-```
-
-```{r}
-(effective_lens_XUTs <- full_join(
-  dplyr::select(effective_body_len_XUTs, id, pAfiltered_cleaned_body_len),
-  dplyr::select(effective_end_len_XUTs, id, pAfiltered_end_len)) %>%
-   arrange(id)
-  )
-```
-
-
-
-
-### pAplus positions mask
-
-```{r}
-(body_pAplus_masked <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/noPap_0rapa_sites_per_cleaned_body.txt', col.names=c('chr', 'start', 'end', 'anno', 'body_pAplus_cnt')) %>%
-   tbl_df %>%
-   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-   mutate(body_pAplus_cnt = ifelse(body_pAplus_cnt == '.', as.numeric(0), as.numeric(body_pAplus_cnt))))
-```
-
-
-
-```{r}
-(end_pAplus_masked <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/noPap_0rapa_sites_per_end.txt', col.names=c('chr', 'start', 'end', 'anno', 'end_pAplus_cnt')) %>%
-   tbl_df %>%
-   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-   mutate(end_pAplus_cnt = ifelse(end_pAplus_cnt == '.', as.numeric(0), as.numeric(end_pAplus_cnt))))
-```
-
-
-#### combined pA plus masks 
-```{r}
-(pAplus_masked <- full_join(
-  dplyr::select(body_pAplus_masked, id, body_pAplus_cnt),
-  dplyr::select(end_pAplus_masked, id, end_pAplus_cnt)) %>%
-   arrange(id)
-  )
-```
-
-
-Final annotations, containing that info:  
-```{r}
-(anno <- left_join(anno, effective_lens) %>%
-   left_join(pAplus_masked))
-```
-
-
-```{r}
-(both_df %<>% 
-  dplyr::select(id, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
-  left_join(., anno) %>%
-  mutate(scaled_reads = case_when(.$part == 'body' & pA != 'pA-X' ~ sum/pAfiltered_cleaned_body_len,
-                               .$part == 'end'  & pA != 'pA-X' ~ sum/pAfiltered_end_len,
-                               .$part == 'body' & pA == 'pA-X' ~ sum/(pAfiltered_cleaned_body_len-body_pAplus_cnt),
-                               .$part == 'end'  & pA == 'pA-X' ~ sum/(pAfiltered_end_len-end_pAplus_cnt))) %>%
-  dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
-```
-
-```{r}
-(XUTs_both_df %<>% 
-  dplyr::select(id, type, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
-  left_join(., effective_lens_XUTs) %>%
-  mutate(scaled_reads = case_when(.$part == 'body' & pA != 'pA-X' ~ sum/pAfiltered_cleaned_body_len,
-                               .$part == 'end'  & pA != 'pA-X' ~ sum/pAfiltered_end_len#,
-#                               .$part == 'body' & pA == 'pA-X' ~ sum/(pAfiltered_cleaned_body_len-body_pAplus_cnt),
-#                               .$part == 'end'  & pA == 'pA-X' ~ sum/(pAfiltered_end_len-end_pAplus_cnt)
-)) %>%
-  dplyr::select(id, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
-```
-
-## save the counts
-
-```{r}
-save(both_df, file='data/norm_signal_body_end_pA+_pA-_BGsub.RData')
-```
-
-```{r}
-save(XUTs_both_df, file='data/norm_signal_XUTs_body_end_pA+_pA-_BGsub.RData')
-```
-
-
-
-#### sanity check non-exisiting gene bodies
-…. note some regions pAfiltered_cleaned_body_len are NA … ie there is no body, either completely overlapping with ends or otherwise the annotation is too short (or only consists of masked genomic A, although this probably never happens) !! 
--> there should be no reads for those
--> sanity check all with pAfiltered_cleaned_body_len == NA should never have counts
-
-```{r}
-body_len_NA_ids <- filter(anno, is.na(pAfiltered_cleaned_body_len)) %>% distinct(id, common_name, type)
-
-table(body_len_NA_ids$type)
-```
-
-```{r}
-(filter(effective_lens_XUTs, is.na(pAfiltered_cleaned_body_len)))
-```
-
-mostly CUTs, many SUTs and XUTs, some snRNAs very few ORFs.  
-
-
-```{r}
-filter(both_df, part == 'body', id %in% body_len_NA_ids$id)
-```
-
-```{r}
-filter(both_df, part == 'end', id %in% body_len_NA_ids$id)
-```
-
-
---> seems correct, we never count body for those where the region does not exist. But ends are apprently counted ...
-
-
-
-
-#### look at some single genes
-
-```{r}
-filter(both_df,
-       common_name == 'PMA1',
-       rapa == 0, rep == 1) %>%
-  kable
-```
-
-```{r}
-filter(both_df,
-       common_name == 'PGK1',
-       rapa == 0, rep == 1) %>%
-  kable
-```
-
-
-```{r}
-filter(both_df,
-       common_name == 'SNR11',
-       rapa == 0, rep == 1) %>%
-  kable
-```
-
-```{r}
-filter(both_df,
-       common_name == 'SCR1',
-       rapa == 0, rep == 1) %>%
-  kable
-```
-
-
-
-
-# End vs body pA+ vs pA-
-
-Global distribution of pA+ and pA- signal in gene body an gene end regions.
-
-# sum signal per annotation class and sample
-```{r}
-(both_totals <- bind_rows(both_df, XUTs_both_df) %>%
-  #mutate(sum = ifelse(sum < 0, 0, sum)) %>%
-  group_by(type, Pap, strain,fraction, rapa, part, pA, rep) %>% 
-  summarize(total_Spnorm_signal = sum(sum)))
-```
-
-```{r barplot total all samples }
-both_totals %>%
-  group_by(part, pA, fraction, strain, rapa, rep) %>%
-  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
-ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-```{r barplot total all samples only ORFs}
-both_totals %>%
-  filter(type == 'ORF-T') %>%
-  group_by(part, pA, fraction, strain, rapa, rep) %>%
-  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
-ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-```{r barplot total all samples rep1 rapa0}
-both_totals %>%
-  filter(rapa == 0, rep == 1) %>%
-  group_by(part, pA, fraction, strain, rapa, rep) %>%
-  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
-ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-```{r barplot total all samples rapa0 only ORFT}
-both_totals %>%
-  filter(rapa == 0, type == 'ORF-T') %>%
-  group_by(part, pA, fraction, strain, rapa, rep) %>%
-  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
-ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-```{r barplot totals per type all samples rep1 rapa0}
-both_totals %>%
-  filter(rapa == 0, rep == 1) %>%
-ggplot(., aes(x=part, y=total_Spnorm_signal, fill=part)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~type+strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-```{r barplot totals ORF-T all samples rep1 rapa0}
-both_totals %>%
-  filter(rapa == 0, rep == 1, type == 'ORF-T') %>%
-ggplot(., aes(x=part, y=total_Spnorm_signal, fill=part)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~type+strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-#### total signal per type
-
-```{r barplot signal per type and part}
-both_totals %>%
-  filter(rapa == '0', rep == '1') %>%
-  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~part+strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x=element_text(hjust=1, angle=45))
-```
-
-```{r barplot signal per type wo part}
-both_totals %>%
-  filter(rapa == '0', rep == '1') %>%
-  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
-  geom_bar(stat='identity') +
-  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x=element_text(hjust=1, angle=45))
-```
-
-
-#### pAplus vs pAminus body vs end pie
-
-```{r}
-pAplusandminus_totals <- filter(both_totals, pA == 'pA+ + pA-') %>%
-  ungroup %>%
-  dplyr::select(type, strain, fraction, rapa, rep, part, total_Spnorm_signal) %>%
-    mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
-  dplyr::rename(pAplusandminus_total = total_Spnorm_signal)
-
-pAminus_totals <- filter(both_totals, pA == 'pA-') %>%
-  ungroup %>%
-  dplyr::select(type, strain, fraction, rapa, rep, part, total_Spnorm_signal) %>%
-    mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
-  dplyr::rename(pAminus_total = total_Spnorm_signal)
-```
-
-```{r}
-pie_percents_pAplusvsminus <- left_join(pAplusandminus_totals, pAminus_totals) %>%
-  mutate(pAplus_total = ifelse(pAplusandminus_total > pAminus_total,
-                               pAplusandminus_total - pAminus_total,
-                               0)) %>%
-  dplyr::select(-pAplusandminus_total) %>%
-  gather(pA, total_Spnorm_signal, -type, -strain, -fraction, -rapa, -rep, -part) %>%
-  unite(part, c(part, pA), sep='_') %>%
-  group_by(type, strain, fraction, rapa, rep) %>%
-  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
-```
-
-```{r}
-pie_percents_pAplusvsminus %>%
-  ungroup %>%
-  arrange(type, strain, fraction, rapa, rep, part) %>%
-  kable
-```
-
-
-```{r piechart body vs end pAplus vs pAminus}
-pie_percents_pAplusvsminus %>%
-  filter(rapa == '0') %>% 
-ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
-  geom_bar(stat='identity') +
-  coord_polar(theta='y') +
-  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-
-#### E-PAP libraries piechart
-```{r}
-pie_percents_pAplusandminus <- filter(both_totals, pA == 'pA+ + pA-') %>%
-  group_by(pA, type, strain, fraction, rapa, rep) %>%
-  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
-
-kable(pie_percents_pAplusandminus)
-```
-
-
-```{r EPAP libraries piechart}
-pie_percents_pAplusandminus %>%
-  filter(rapa == '0') %>%
-ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
-  geom_bar(stat='identity') +
-  coord_polar(theta='y') +
-  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-#### noPAP libraries piechart
-
-```{r}
-pie_percents_pAplus <- filter(both_totals, pA == 'pA+') %>%
-  group_by(pA, type, strain, fraction, rapa, rep) %>%
-  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
-
-kable(pie_percents_pAplus)
-```
-
-
-```{r noPAP libraries piechart}
-pie_percents_pAplus %>%
-  filter(rapa == '0') %>%
-ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
-  geom_bar(stat='identity') +
-  coord_polar(theta='y') +
-  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-#### pAminus piechart
-
-```{r}
-pie_percents_pAminus <- filter(both_totals, pA == 'pA-') %>%
-  mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
-  group_by(pA, type, strain, fraction, rapa, rep) %>%
-  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
-
-kable(pie_percents_pAminus)
-```
-
-```{r pAminus libraries piechart}
-pie_percents_pAminus %>%
-  filter(rapa == '0') %>%
-ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
-  geom_bar(stat='identity') +
-  coord_polar(theta='y') +
-  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-#### pAminus pAplus masked piechart
-
-
-```{r}
-pie_percents_pAminus_masked <- filter(both_totals, pA == 'pA-X') %>%
-  mutate(total_Spnorm_signal = ifelse(total_Spnorm_signal < 0, 0, total_Spnorm_signal)) %>%
-  group_by(pA, type, strain, fraction, rapa, rep) %>%
-  mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal))
-
-kable(pie_percents_pAminus_masked)
-```
-
-```{r pAminus pAplus masked libraries piechart}
-pie_percents_pAminus_masked %>%
-  filter(rapa == '0') %>%
-ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
-  geom_bar(stat='identity') +
-  coord_polar(theta='y') +
-  facet_grid(type+strain~fraction+rapa+rep, scales='free') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_blank())
-```
-
-
-# Violin plots per type and part
-
-```{r}
-withXUTs_both_df <- bind_rows(both_df, XUTs_both_df) %>%
-  mutate(type=factor(type, levels=c('ORF-T', 'XUT', 'SUTs', 'CUTs', 'snRNA')))
-```
-
-
-#### violin plot fun
-```{r}
-violin_plot <- function(df) {
-  ggplot(df, aes(x=type, y=scaled_reads, fill=type)) +
-  geom_violin(scale='width') +
-  geom_boxplot(fill='gray', width=.2, outlier.shape = NA) +
-  facet_grid(strain+part~pA+fraction+rep, scales='free') +
-  scale_y_log10() +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  theme(axis.text.x = element_text(hjust=1, angle=45))
-}
-```
-
-
-
-```{r violins all at once}
-violin_plot(both_df)
-```
-
-
-```{r violins rapa0 rep1}
-both_df %>%
-  filter(rep == 1, rapa == 0, type != 'other', pA != 'pA+ + pA-') %>%
-  violin_plot(.)
-```
-
-```{r violins Mex and Nab allpA rapa0 rep1 with XUTs cleaned}
-withXUTs_both_df %>%
-  filter(rep == 1, rapa == 0, type != 'other') %>%
-  violin_plot(.)
-```
-
-```{r violins Mex and Nab pAplus and minus rapa0 rep1 with XUTs cleaned}
-withXUTs_both_df %>%
-  filter(rep == 1, rapa == 0, type != 'other', pA != 'pA+ + pA-', pA != 'pA-X') %>%
-  violin_plot(.)
-```
 
 
 ```{r}

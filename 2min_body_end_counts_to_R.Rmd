@@ -1,0 +1,325 @@
+---
+title: "Count body and end signal for the various samples and tracks"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_counting/', dev='pdf')
+```
+
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+```
+
+
+# Load 2min counts into R
+
+```{r}
+read_bedgraph_sums <- function(path, file_list, sfx) {
+  lapply(file_list, function(fname) {read.table(paste0(path,fname,sep=''), header=F, col.names=c('chr', 'start', 'end', 'id', 'sum'), stringsAsFactors = FALSE) %>% 
+      tbl_df %>%
+  mutate(condition = sub(sfx, '', fname),
+         condition = sub('norm_', '', condition),
+         sum = ifelse(sum == '.', 0, as.numeric(sum)))}) %>%
+  bind_rows()
+}
+```
+
+
+#### load and combine Sp-normalized end counts
+```{r}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
+sfx <- '_endpm200.*count_sum_per_anno.txt$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+file_list
+```
+
+
+```{r, warning=FALSE}
+(end_counts_df <- read_bedgraph_sums(path, file_list, sfx))
+```
+
+
+#### load and combine Sp-normalized body counts
+```{r}
+sfx <- '_body_endsm200.*_count_sum_per_anno.txt$'
+
+file_list <- dir(path)[grep(sfx, dir(path))]
+
+file_list
+```
+
+```{r, warning=FALSE}
+(body_counts_df <- read_bedgraph_sums(path, file_list, sfx))
+```
+
+
+#### combine body and end 
+
+```{r}
+(both_df <- bind_rows(mutate(body_counts_df, part = 'body'), 
+                     mutate(end_counts_df, part = 'end')) %>%
+   mutate(pA = case_when(grepl('^noPap', .$condition) ~ 'pA+', 
+                         grepl('^xPappAminus', .$condition) ~ 'pA-',
+                         grepl('^xPappAmasked', .$condition) ~ 'pA-X',
+                         grepl('^xPap_', .$condition) ~ 'pA+ + pA-',
+                         TRUE ~ 'NA')))
+```
+
+
+```{r}
+save(both_df, file='data/norm_2min_body_end_signals.RData')
+```
+
+
+## Sanity check BGsub and pA minus method
+
+simply checks that 
+1. norm. counts for $BGsub = normIP  -  normnegativeIP$  
+2. norm. counts for $pAminus = pAplusandminus  -  pAplus$
+
+#### BGsub
+
+```{r}
+IP_raw <- filter(both_df, grepl('ip', condition) & !(grepl('BGsub', condition))) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop')
+
+IP_neg <- filter(both_df, grepl('ip_neg0', condition)) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::select(-rapa, -rep) %>%
+  dplyr::rename(ip_neg_sum = sum)
+
+IP_BGsub <- filter(both_df, grepl('ip', condition) & (grepl('BGsub', condition))) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::rename(BGsub_sum = sum)
+```
+
+
+```{r}
+IP_BGsub_redone <- left_join(IP_raw, IP_neg) %>%
+  mutate(BGsub_sum_redone = sum - ip_neg_sum) %>%
+  dplyr::select(-sum, -ip_neg_sum)
+```
+
+```{r}
+(BGsub_comparison <- left_join(IP_BGsub_redone, IP_BGsub) %>%
+   mutate(relative_error = (BGsub_sum_redone-BGsub_sum)/BGsub_sum))
+```
+
+```{r}
+BGsub_comparison %>%
+  filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
+  group_by(pA, part, Pap, strain, rapa, rep) %>%
+  #summarize(cnt=n()) %>% kable
+  do(tidy(cor.test(.$BGsub_sum, .$BGsub_sum_redone))) %>%
+  kable
+```
+
+```{r}
+BGsub_comparison %>%
+  filter(is.finite(BGsub_sum_redone), is.finite(BGsub_sum)) %>%
+  group_by(pA, part, Pap, strain, rapa, rep) %>%
+  do(tidy(summary(.$relative_error))) %>% 
+  kable
+```
+
+--> perfectly correlated and same values
+--> OK
+
+
+
+## Normalize reads to region length and correct for genomic A masked positions
+
+#### work only with BGsub IPs
+
+```{r}
+(both_df %<>% 
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep', 'BGsub'), sep='_') %>%
+  separate(id, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+  filter(fraction == 'input' | (fraction == 'ip' & BGsub == 'BGsub'))  %>%
+  dplyr::select(-BGsub))
+```
+
+Fix the XUT annotations, which are differently organized.
+```{r}
+both_df %<>%
+  mutate(id = ifelse(id == 'XUT', type, id),
+         type = ifelse(grepl('^XUT', type), 'XUT', type))
+```
+
+
+
+### cleaned region lengths and A-masked positions
+
+Note: for body regions stripped for overlapping ends, end regions are all 400bp. This info is contained in the A-mask count files.
+
+A-masked positions: nothing will ever be counted from those positions, so in practice these positions do not count to the length of each region -> subtract them:  
+```{r}
+(effective_body_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
+   tbl_df %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+   mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
+```
+
+```{r}
+(effective_body_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned2x_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
+   tbl_df %>%
+   separate(anno, c('type', 'id'), sep=':') %>%
+   mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
+```
+
+```{r}
+(effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
+   tbl_df %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+   mutate(pAfiltered_end_len = end - start - end_pA_masked))
+```
+
+```{r}
+(effective_end_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
+   tbl_df %>%
+   separate(anno, c('type', 'id'), sep=':') %>%
+   mutate(pAfiltered_end_len = end - start - end_pA_masked))
+```
+
+
+#### combine all of the above
+
+```{r}
+(effective_lens <- full_join(
+  dplyr::select(effective_body_len, id, type, pAfiltered_cleaned_body_len),
+  dplyr::select(effective_end_len, id, type, pAfiltered_end_len)) %>%
+   arrange(id)
+  )
+```
+
+```{r}
+(effective_lens_XUTs <- full_join(
+  dplyr::select(effective_body_len_XUTs, id, type, pAfiltered_cleaned_body_len),
+  dplyr::select(effective_end_len_XUTs, id, type, pAfiltered_end_len)) %>%
+   arrange(id)
+  )
+```
+
+
+
+
+#### Final annotations, containing that info
+
+Original plain annotations:  
+```{r}
+(anno <- read.table("/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed", col.names = c('chr', 'start', 'end', 'anno', 'pad', 'strand')) %>%
+  tbl_df %>% 
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':')  %>%
+   arrange(id))
+```
+
+ 
+```{r}
+(anno <- bind_rows(effective_lens, effective_lens_XUTs) %>%
+   full_join(anno, .) %>%
+  mutate(type = ifelse(grepl('^snR', name), 'snRNA', as.character(type)),
+         type = factor(type, levels=c('ORF-T', 'XUT', 'SUTs', 'CUTs', 'snRNA', 'other'))))
+```
+
+
+```{r}
+(both_df %<>% 
+  dplyr::select(id, sum, part, pA, Pap, strain, fraction, rapa, rep) %>%
+  left_join(., anno) %>%
+  mutate(scaled_reads = case_when(.$part == 'body' ~ sum/pAfiltered_cleaned_body_len,
+                               .$part == 'end' ~ sum/pAfiltered_end_len)) %>%
+  dplyr::select(id, name, common_name, type, part, pA, Pap, strain, fraction, rapa, rep, sum, scaled_reads))
+```
+
+
+#### save the normalized scaled signals
+
+```{r}
+save(both_df, file='data/norm_2min_body_end_scaled_and_BGsub.RData')
+```
+
+
+
+
+#### sanity check non-exisiting gene bodies
+…. note some regions pAfiltered_cleaned_body_len are NA … ie there is no body, either completely overlapping with ends or otherwise the annotation is too short (or only consists of masked genomic A, although this probably never happens) !! 
+-> there should be no reads for those
+-> sanity check all with pAfiltered_cleaned_body_len == NA should never have counts
+
+```{r}
+body_len_NA_ids <- filter(anno, is.na(pAfiltered_cleaned_body_len)) %>% distinct(id, common_name, type)
+
+table(body_len_NA_ids$type)
+```
+
+```{r}
+(filter(effective_lens, is.na(pAfiltered_cleaned_body_len)) %$% type %>% table)
+
+(filter(effective_lens_XUTs, is.na(pAfiltered_cleaned_body_len)) %>% nrow)
+```
+
+mostly CUTs, many SUTs and XUTs, some snRNAs very few ORFs.  
+
+
+```{r}
+filter(both_df, part == 'body', id %in% body_len_NA_ids$id)
+```
+
+```{r}
+filter(both_df, part == 'end', id %in% body_len_NA_ids$id)
+```
+
+
+--> seems correct, we never count body for those where the region does not exist. But ends are apprently counted ...
+
+
+
+
+#### look at some single genes
+
+```{r}
+filter(both_df,
+       common_name == 'PMA1',
+       rapa == 0, rep == 1) %>%
+  kable
+```
+
+```{r}
+filter(both_df,
+       common_name == 'PGK1',
+       rapa == 0, rep == 1) %>%
+  kable
+```
+
+
+```{r}
+filter(both_df,
+       common_name == 'SNR11',
+       rapa == 0, rep == 1) %>%
+  kable
+```
+
+```{r}
+filter(both_df,
+       common_name == 'SCR1',
+       rapa == 0, rep == 1) %>%
+  kable
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+

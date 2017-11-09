@@ -1,0 +1,284 @@
+```{r, echo=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_termination_decay_correlation/'), 
+                      dev='pdf', echo=TRUE, warning=FALSE, message=FALSE, error=TRUE)
+```
+
+---
+title: 'Termination phenotype vs decay'
+author: "Manfred Schmid"
+output: html_document
+---
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(RMetaTools))
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(broom))
+suppressWarnings(library(knitr))
+```
+
+
+## Deeptools
+
+Using deeptools to prepare heatmaps and metagene value matrices
+
+
+#### deeptools matrix termination region ORF-Ts ...
+```{bash, eval=FALSE}
+#!/usr/bin/env bash
+
+### ORFT TSS ###
+ORFTs="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
+
+
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
+
+## all bigwigs
+plus_bw="*_plus*.bw"
+
+
+# xPAP
+# xORF-T TES pm 1k
+
+## Mex
+
+### xPap ip 0 rel 15
+title="Mex_ip_xPappAminus"
+samples=$(ls $plus_bw | grep Mex67AA_ip | grep -v 70 | grep xPappAminus)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+1000 1000 TES TESpm1k Mex67AA_ip_0 Mex67AA_ip_15 "deeptools_out/ORFT/${title}_ORFT_TESpm1k" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+
+## Nab
+
+### xPap ip 0 rel 15
+title="Nab_ip_xPappAminus"
+samples=$(ls $plus_bw | grep Nab2AA_ip | grep -v 70 | grep xPappAminus)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+1000 1000 TES TESpm1k Nab2AA_ip_0 Nab2AA_ip_15 "deeptools_out/ORFT/${title}_ORFT_TESpm1k" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+```
+
+#### deeptools matrix pA-site proximal signal of tandem genes...
+```{bash, eval=FALSE}
+# noPAP
+# xORF-T TES pm 1k
+
+## Mex
+
+### noPap ip 0 rel 15
+title="Mex_ip_noPap"
+samples=$(ls $plus_bw | grep Mex67AA_ip | grep -v 70 | grep noPap)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+1000 1000 TES TESpm1k Mex67AA_ip_0 Mex67AA_ip_15 "deeptools_out/ORFT/${title}_ORFT_TESpm1k" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+
+### noPap in 0 rel 15
+title="Mex_input_noPap"
+samples=$(ls $plus_bw | grep Mex67AA_input | grep -v 70 | grep noPap)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+1000 1000 TES TESpm1k Mex67AA_input_0 Mex67AA_input_15 "deeptools_out/ORFT/${title}_ORFT_TESpm1k" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+## Nab
+
+### noPap ip 0 rel 15
+title="Nab_ip_noPap"
+samples=$(ls $plus_bw | grep Nab2AA_ip | grep -v 70 | grep noPap)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+1000 1000 TES TESpm1k Nab2AA_ip_0 Nab2AA_ip_15 "deeptools_out/ORFT/${title}_ORFT_TESpm1k" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+
+### noPap in 0 rel 15
+title="Nab2_input_noPap"
+samples=$(ls $plus_bw | grep Nab2AA_input | grep -v 70 | grep noPap)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+1000 1000 TES TESpm1k Nab2AA_input_0 Nab2AA_input_15 "deeptools_out/ORFT/${title}_ORFT_TESpm1k" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+```
+
+
+#### deeptools termination defect
+
+this is based on Mex specifically
+```{bash, eval = FALSE}
+## get the termination defect ... 250bp window
+title="Mex_ip_xPappAminus"
+samples=$(ls $plus_bw | grep Mex67AA_ip | grep -v 70 | grep xPappAminus)
+sample_names=$(echo $samples | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+bash ~/ms_tools/MS_Metagene_Tools/RNAseq_sensitivityX.sh reference-point \
+$ORFTs "$samples" "${samples//plus/minus}" \
+0 250 TES term250 Mex67AA_ip_0 Mex67AA_ip_15 "deeptools_out/ORFT/${title}_ORFT_TESp250" "--binSize=50 --missingDataAsZero --averageTypeBins sum"
+
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/ORFT/${title}_ORFT_TESp250_joined_sensitivity.gz
+ 
+plotHeatmap -m deeptools_out/ORFT/${title}_ORFT_TESp250_joined_sensitivity_log2.gz \
+      --sortUsing max --colorMap Blues --missingDataColor white \
+      --refPointLabel TES \
+      -out deeptools_out/ORFT/${title}_ORFT_TESp250_sensitivity_log2_heatmap.pdf \
+      --outFileSortedRegions deeptools_out/ORFT/sorted_by_Mex_term_defect_250.bed
+
+```
+
+
+## plot Heatmaps
+
+#### log2 values
+```{bash, eval = FALSE}
+for mat in deeptools_out/ORFT/*_ORFT_TESpm1k_joined.gz
+  do
+    python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py $mat
+  done
+
+for mat in deeptools_out/ORFT/*_ORFT_TESpm1k_joined_sensitivity.gz
+  do
+    python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py $mat
+  done
+```
+
+
+#### sort matrices by term defect
+```{bash, eval = FALSE}
+for mat in deeptools_out/ORFT/*_ORFT_TESpm1k_joined*log2.gz
+  do
+    echo $mat
+    python /Users/schmidm/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py $mat deeptools_out/ORFT/sorted_by_Mex_term_defect_250.bed -o ${mat/.gz/_sorted_by_Mex_term250.gz}
+  done
+```
+
+
+#### plot sensitivity heatmaps
+```{bash, eval = FALSE}
+#plot log2 sensitivities pAplus
+for mat in deeptools_out/ORFT/*_noPap_ORFT_TESpm1k_joined_sensitivity_log2_sorted_by_Mex_term250.gz
+  do
+    echo $mat
+    plotHeatmap -m ${mat} \
+      --sortRegions no --missingDataColor white \
+      --refPointLabel TES \
+      --zMin -3 --zMax 3 \
+      --yMin -5 --yMax 5 \
+      -out ${mat/.gz/_heatmap.pdf}
+  done
+
+#plot log2 sensitivities pAminus
+for mat in deeptools_out/ORFT/*_xPappAminus_ORFT_TESpm1k_joined_sensitivity_log2_sorted_by_Mex_term250.gz
+  do
+    echo $mat
+    plotHeatmap -m ${mat} \
+      --sortRegions no --missingDataColor white \
+      --refPointLabel TES \
+      --zMin -10 --zMax 10 \
+      --yMin -5 --yMax 5 \
+      -out ${mat/.gz/_heatmap.pdf}
+  done
+
+```
+
+
+#### decay vs termination correlation
+
+## ie termination region sensitivity  
+```{r}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/ORFT/'
+file <- 'Mex_ip_xPappAminus_ORFT_TESpm1k_joined_sensitivity_log2.gz'
+
+(mex_termination <- RMetaTools::load_deeptoolsmatrix(paste0(path,file)) %>%
+    filter(rel_pos >= 0, rel_pos < 250) %>%
+    dplyr::mutate(region = 'term_xPap') %>%
+    group_by(sample_name, id, region) %>%
+    summarize(log_mean_value=mean(value)))
+```
+
+```{r}
+file <- 'Nab_ip_xPappAminus_ORFT_TESpm1k_joined_sensitivity_log2.gz'
+(nab_termination <- RMetaTools::load_deeptoolsmatrix(paste0(path,file)) %>%
+    filter(rel_pos >= 0, rel_pos < 250) %>%
+    dplyr::mutate(region = 'term_xPap') %>%
+    group_by(sample_name, id, region) %>%
+    summarize(log_mean_value=mean(value)))
+```
+
+```{r}
+ggplot(mex_termination, aes(x=log_mean_value, color=sample_name)) + geom_density()
+```
+
+
+
+#### pA+ defect  
+```{r}
+file <- 'Mex_ip_noPap_ORFT_TESpm1k_joined_sensitivity_log2.gz'
+(mex_pas <- RMetaTools::load_deeptoolsmatrix(paste0(path,file))  %>%
+    filter(rel_pos >= -50, rel_pos < 50) %>%
+    dplyr::mutate(region = 'PASpm50_noPap') %>%
+    group_by(sample_name, id, region) %>%
+    summarize(log_mean_value=mean(value)))
+```
+
+```{r}
+file <- 'Nab_ip_noPap_ORFT_TESpm1k_joined_sensitivity_log2.gz'
+(nab_pas <- RMetaTools::load_deeptoolsmatrix(paste0(path,file))  %>%
+    filter(rel_pos >= -50, rel_pos < 50) %>%
+    dplyr::mutate(region = 'PASpm50_noPap') %>%
+    group_by(sample_name, id, region) %>%
+    summarize(log_mean_value=mean(value)))
+```
+
+combine  
+```{r}
+(all_tbl <- bind_rows(mex_termination, mex_pas) %>%
+   bind_rows(., nab_termination) %>%
+   bind_rows(., nab_pas) %>%
+    separate(sample_name, c('strain', 'fraction', 'rapa'), sep='_') %>%
+    dplyr::select(id, strain, fraction, rapa, log_mean_value, region) %>%
+   spread(region, log_mean_value))
+```
+
+
+#### correlation
+```{r Mex and Nab termination vs pA correlation}
+ggplot(all_tbl, aes(x=PASpm50_noPap, y=term_xPap)) +
+  geom_point(alpha=.4, size=.5) +
+  facet_grid(.~strain+fraction+rapa) +
+  stat_smooth(method='lm') +
+  theme_bw()
+```
+
+
+```{r}
+all_tbl %>%
+  group_by(strain, fraction, rapa) %>%
+  do(tidy(cor.test(.$PASpm50_noPap, .$term_xPap, method='pearson')))
+```
+
+```{r}
+all_tbl %>%
+  group_by(strain, fraction, rapa) %>%
+  do(tidy(cor.test(.$PASpm50_noPap, .$term_xPap, method='spearman')))
+```
+
+```{r}
+sessionInfo()
+```

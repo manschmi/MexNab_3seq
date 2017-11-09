@@ -14,6 +14,10 @@ knitr::opts_chunk$set(echo = TRUE)
 Libraries were prepared using the QuantSeq REV kit from Lexogen (Lexogen GmbH, \link{https://www.lexogen.com}). Sequencing was done via Lexogen at the Biocenter Sequencing Facility Vienna using sequencing type: HiSeqV4 SR50.
 Lexogen did barcode splitting and provided the final data as unmapped bam files (more compact than fastq, but contain same info).
 
+Same procedure used for 2min 4tU and 10min 4tU experiments. Single examples depicted for demonstration are from the 2' 4tU series except if stated otherwise.
+
+
+
 To inspect these bam files:
 
 ```{bash, eval = F}
@@ -373,7 +377,62 @@ cat $map | while read barcode_line; do barcode_map=(${barcode_line/ / }); \
 mv ${barcode_map[1]}${in_sfx} ${barcode_map[0]}${out_sfx}; done
 ```
 
-The table used is:
+
+For the 10 minutes 4tU experiment data the table used is:
+```{bash, eval = FALSE}
+cat file_rename_map_correct.txt
+Nab_in_0_1	39007_ACATTA_C9BADANXX_1_20160502B_20160502
+Nab_in_15_1	39008_GAACCT_C9BADANXX_1_20160502B_20160502
+Nab_in_70_1	39009_ACAACG_C9BADANXX_1_20160502B_20160502
+Nab_in_0_2	39010_AGTTGA_C9BADANXX_1_20160502B_20160502
+Nab_in_15_2	39011_AGGCAT_C9BADANXX_1_20160502B_20160502
+Nab_in_70_2	39012_GAAGTG_C9BADANXX_1_20160502B_20160502
+Nab_in_0_3	39013_AACAAG_C9BADANXX_1_20160502B_20160502
+Nab_in_15_3	39014_TTGGTA_C9BADANXX_1_20160502B_20160502
+Nab_in_70_3	39015_GGTGAG_C9BADANXX_1_20160502B_20160502
+Nab_in_neg	39016_CGGTTA_C9BADANXX_1_20160502B_20160502
+Mex_in_0_1	39017_GCGCTG_C9BADANXX_1_20160502B_20160502
+Mex_in_15_1	39018_GACGAT_C9BADANXX_1_20160502B_20160502
+Mex_in_70_1	39019_ACCTAC_C9BADANXX_1_20160502B_20160502
+Mex_in_0_2	39020_AGAATC_C9BADANXX_1_20160502B_20160502
+Mex_in_15_2	39021_AACCGA_C9BADANXX_1_20160502B_20160502
+Mex_in_70_2	39022_CAACAG_C9BADANXX_1_20160502B_20160502
+Mex_in_0_3	39023_CGAAGG_C9BADANXX_1_20160502B_20160502
+Mex_in_15_3	39024_AACGCC_C9BADANXX_1_20160502B_20160502
+Mex_in_70_3	39025_CAAGCA_C9BADANXX_1_20160502B_20160502
+Mex_in_neg	39026_CACACT_C9BADANXX_1_20160502B_20160502
+Nab_ip_0_1	39027_TGGATT_C9BADANXX_1_20160502B_20160502
+Nab_ip_15_1	39028_GCGAAT_C9BADANXX_1_20160502B_20160502
+Nab_ip_70_1	39029_TGGCGA_C9BADANXX_1_20160502B_20160502
+Nab_ip_0_2	39030_CAATGC_C9BADANXX_1_20160502B_20160502
+Nab_ip_15_2	39031_AAGACA_C9BADANXX_2_20160502B_20160502
+Nab_ip_70_2	39032_CAGATG_C9BADANXX_2_20160502B_20160502
+Nab_ip_0_3	39033_GTTACC_C9BADANXX_2_20160502B_20160502
+Nab_ip_15_3	39034_CAGCGT_C9BADANXX_2_20160502B_20160502
+Nab_ip_70_3	39035_GCAGCC_C9BADANXX_2_20160502B_20160502
+Nab_ip_neg	39036_CGATCT_C9BADANXX_2_20160502B_20160502
+Mex_ip_0_1	39037_CACTAA_C9BADANXX_2_20160502B_20160502
+Mex_ip_15_1	39038_GGAGGT_C9BADANXX_2_20160502B_20160502
+Mex_ip_70_1	39039_TAATCG_C9BADANXX_2_20160502B_20160502
+Mex_ip_0_2	39040_GATCAC_C9BADANXX_2_20160502B_20160502
+Mex_ip_15_2	39041_CTCTCG_C9BADANXX_2_20160502B_20160502
+Mex_ip_70_2	39042_TGCTAT_C9BADANXX_2_20160502B_20160502
+Mex_ip_0_3	39043_CGCCTG_C9BADANXX_2_20160502B_20160502
+Mex_ip_15_3	39044_CATCTA_C9BADANXX_2_20160502B_20160502
+Mex_ip_70_3	39045_AAGCTC_C9BADANXX_2_20160502B_20160502
+Mex_ip_neg	39046_CAGGAC_C9BADANXX_2_20160502B_20160502
+noPap_in_0	39047_CGCAAC_C9BADANXX_2_20160502B_20160502
+noPap_in_70	39048_CGCGGA_C9BADANXX_2_20160502B_20160502
+noPap_ip_0	39049_CCAATT_C9BADANXX_2_20160502B_20160502
+noPap_ip_70	39050_TCTTAA_C9BADANXX_2_20160502B_20160502
+xPap_in_0	39051_CCGACC_C9BADANXX_2_20160502B_20160502
+xPap_in_70	39052_AAGTGG_C9BADANXX_2_20160502B_20160502
+xPap_ip_0	39053_TACCTT_C9BADANXX_2_20160502B_20160502
+xPap_ip_70	39054_GGCCAA_C9BADANXX_2_20160502B_20160502
+```
+
+
+For the 2 minutes 4tU experiment data the table used is:
 ```{bash, eval = FALSE}
 cat ../../file_rename_map_Lexogen2.txt
 noPap_Nab2AA_input_0_1 42448_AATAGC_C9P6RANXX_5_20160808B_20160808_trimmed_cleanAligned.sortedByCoord.out
@@ -408,10 +467,20 @@ xPap_Mex67AA_ip_15_3 42476_AGACCA_C9P6RANXX_5_20160808B_20160808_trimmed_cleanAl
 xPap_Mex67AA_ip_70_1 42477_GTAGAA_C9P6RANXX_5_20160808B_20160808_trimmed_cleanAligned.sortedByCoord.out
 xPap_Mex67AA_ip_70_2 42478_ACTCTT_C9P6RANXX_5_20160808B_20160808_trimmed_cleanAligned.sortedByCoord.out
 xPap_Mex67AA_ip_70_3 42479_TTCCGC_C9P6RANXX_5_20160808B_20160808_trimmed_cleanAligned.sortedByCoord.out
-
 ```
 
 run the renaming script:  
+
+10min data
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/raw_bedgraph
+
+bash ../../scripts/barcode_file_renamer.sh ../../file_rename_map_correct.txt _trimmed_cleanAligned.sortedByCoord.out_plus.bedgraph _plus.bedgraph
+
+bash ../../scripts/barcode_file_renamer.sh ../../file_rename_map_correct.txt _trimmed_cleanAligned.sortedByCoord.out_minus.bedgraph _minus.bedgraph
+```
+
+2min data
 ```{bash, eval = FALSE}
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/raw_bedgraph
 

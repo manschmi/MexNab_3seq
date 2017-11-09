@@ -15,7 +15,7 @@ suppressWarnings(library('magrittr'))
 ```
 
 
-# Background subtraction for IPs
+## Background subtraction for IPs
 
 Using S.pombe normalized values: subtract values from negative IP from all IPs at single position level
 ups:
@@ -110,6 +110,7 @@ def read_chr(file):
             return
 
 
+## ups: prevent appending to a pre-exisiting file -> overwrite instead !
 with open(args.outFileName, 'w') as f:
     f.seek(0)
     f.truncate()
@@ -137,46 +138,56 @@ with open(args.file1, 'r') as file1, open(args.file2, 'r') as file2:
 ```
 
 
-apply this to all files
+
+## 10min data
+
+#### BGSub 10min track files
+
+Here there was a separate negative IP for the Mex67AA and Nab2AA strains, but only from the 0 time point.
+Use the negative control form the same strain for BGsub.
+
 ```{bash, eval=FALSE}
 #!/bin/bash
 
 #This script substracts the values at each positions covered for the native IP (neg0) from the IP tracks
 
 
-cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/norm_and_pA_filtered_bedgraph/
 
 ## only relevant for IPs obviously
-##rapa=0 samples
-for f in *_ip_0*_KevinRoyAfiltered.bedgraph
+
+###for Mex
+negip_file="norm_Mex_ip_neg_plus_KevinRoyAfiltered.bedgraph"
+
+for f in norm_Mex_ip*plus_KevinRoyAfiltered.bedgraph
   do
     echo $f
-    negip_file=$(echo $f | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
     python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+    minus_fname="${f/plus/minus}"
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${minus_fname} ${negip_file/plus/minus} --chunk_size 100000 --value_col 4 -o ${minus_fname/.bedgraph/_BGsub.bedgraph}
   done
 
 
-##rapa=15 samples
-## slightly modified of above, since we only have neg0 without rapa = 0
-for f in *_ip_15*_KevinRoyAfiltered.bedgraph
+###for Nab
+negip_file="norm_Nab_ip_neg_plus_KevinRoyAfiltered.bedgraph"
+
+for f in norm_Nab_ip*plus_KevinRoyAfiltered.bedgraph
   do
     echo $f
-    negip_file=$(echo $f | sed s/Nab2AA/Mex67AA/g | sed s/ip_15/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
     python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+    minus_fname="${f/plus/minus}"
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${minus_fname} ${negip_file/plus/minus} --chunk_size 100000 --value_col 4 -o ${minus_fname/.bedgraph/_BGsub.bedgraph}
   done
 
-##rapa=70 samples
-for f in *Mex*_ip_70*_KevinRoyAfiltered.bedgraph
-  do
-    echo $f
-    negip_file=$(echo $f | sed s/Nab2AA/Mex67AA/g | sed s/ip_70/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
-    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
-  done
 ```
 
 
+
 #### get stats for the effect of BGsub
+
 ```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/norm_and_pA_filtered_bedgraph/
+
 #### total signals and positions above 0
 echo "file sum_raw_signal sum_BGsub_signal sum_raw_positions sum_BGsub_position" > BGsubs.stats
 
@@ -190,20 +201,168 @@ for f in *BGsub.bedgraph
         echo "${f/_BGsub.bedgraph/} $total $BGsub $total_pos $BGsub_pos" >> BGsubs.stats
     done
     
-
-for f in *neg*.bedgraph
-    do
-        echo $f
-        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' ${f})
-        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' ${f})
-        echo "${f/.bedgraph/} $total 0 $total_pos 0" >> BGsubs.stats
-    done
-    ```
+```
 
 
 #### load those stats to R
 ```{r}
-(stats <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/BGsubs.stats', header=TRUE) %>% tbl_df %>%
+(stats_10min <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/norm_and_pA_filtered_bedgraph/BGsubs.stats', header=TRUE) %>% tbl_df %>%
+  mutate(file = sub('^norm_', '', file) %>% 
+           sub('_plus_KevinRoyAfiltered', '', .) %>%
+           sub('_minus_KevinRoyAfiltered', '', .)) %>%
+  group_by(file) %>%
+  summarize(sum_raw_signal = sum(sum_raw_signal),
+            sum_BGsub_signal = sum(sum_BGsub_signal),
+            sum_raw_positions = sum(sum_raw_positions),
+            sum_BGsub_position = sum(sum_BGsub_position)) %>%
+  separate(file, c('strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
+```
+
+--> already good that background subtraction sets negative IP to exactly 0
+
+
+#### santiy check BGsub = raw - BG
+```{r}
+(BG_stats_10min <- filter(stats_10min, rapa == 'neg', fraction == 'ip') %>%
+  dplyr::rename(BG_raw_signal=sum_raw_signal) %>%
+  dplyr::select(strain, fraction, BG_raw_signal) )
+```
+
+
+```{r}
+(BGsub_Sanity_10min <- left_join(filter(stats_10min, rapa != 'neg'), BG_stats_10min) %>%
+  mutate(BGsub_difference = sum_BGsub_signal - (sum_raw_signal - BG_raw_signal)) %>%
+  arrange(BGsub_difference) %>%
+   dplyr::select(-contains('position')))
+```
+
+overall there is a minute discrepancy, ie less than 1 normalized read difference between normalized bedgraph counts and raw bedgraph minus mock counts -> possible rounding errors, did not try to hunt this down.
+
+
+#### visualize the signal stats
+
+```{r}
+(stats_10min_signal <- stats_10min %>%
+  dplyr::select(-sum_raw_positions, -sum_BGsub_position) %>%
+  gather(signal_type, sum_signal, -strain, -fraction, -rapa, -rep))
+```
+
+```{r}
+filter(stats_10min_signal, rapa == 0)
+```
+
+```{r 10min data normalized vs normalized and BGsub signal}
+filter(stats_10min_signal, rapa != 70) %>%
+  ggplot(., aes(x=rep, y=sum_signal, fill=signal_type)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_grid(fraction ~ strain+rapa) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+#### visualize the number of genomic positions covered
+
+note: script only counts positions above background!  
+```{r}
+(stats_10min_pos <- stats_10min %>%
+  dplyr::select(-sum_raw_signal, -sum_BGsub_signal) %>%
+  gather(signal_type, positive_positions, -strain, -fraction, -rapa, -rep))
+```
+
+```{r}
+filter(stats_10min_pos, rapa == 0)
+```
+
+```{r 10min data raw vs BGsub above 0 positions}
+filter(stats_10min_pos, rapa == 0) %>%
+  ggplot(., aes(x=rep, y=positive_positions, fill=signal_type)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_grid(fraction ~ strain) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+
+## 2min data 
+
+#### BGSub 2min track files
+
+Here there was only one negative IP samples, use the noPap version and xPap version of this samples for all relevant BGsub.
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+#This script substracts the values at each positions covered for the native IP (neg0) from the IP tracks
+
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+
+
+
+## for noPap samples
+noPap_negip_file="norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph"
+
+for f in norm_noPap_*ip*plus_KevinRoyAfiltered.bedgraph
+  do
+    echo $f
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${noPap_negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+    fminus=${f/plus/minus}
+    echo $fminus
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${fminus} ${noPap_negip_file/plus/minus} --chunk_size 100000 --value_col 4 -o ${fminus/.bedgraph/_BGsub.bedgraph}
+  done
+
+
+
+## for xPap samples
+xPap_negip_file="norm_xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph"
+
+for f in norm_xPap_*ip*plus_KevinRoyAfiltered.bedgraph
+  do
+    echo $f
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${f} ${xPap_negip_file} --chunk_size 100000 --value_col 4 -o ${f/.bedgraph/_BGsub.bedgraph}
+    fminus=${f/plus/minus}
+    echo $fminus
+    python ~/ms_tools/MS_Metagene_Tools/subtract_bedgraph.py ${fminus} ${xPap_negip_file/plus/minus} --chunk_size 100000 --value_col 4 -o ${fminus/.bedgraph/_BGsub.bedgraph}
+  done
+```
+
+
+
+### get stats for the effect of BGsub
+
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+
+#### total signals and positions above 0
+echo "file sum_raw_signal sum_BGsub_signal sum_raw_positions sum_BGsub_position" > BGsubs.stats
+
+for f in norm_noPap*BGsub.bedgraph
+    do
+        echo $f
+        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' ${f/_BGsub/})
+        BGsub=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
+        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' ${f/_BGsub/})
+        BGsub_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
+        echo "${f/_BGsub.bedgraph/} $total $BGsub $total_pos $BGsub_pos" >> BGsubs.stats
+    done
+    
+for f in norm_xPap*BGsub.bedgraph
+    do
+        echo $f
+        total=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' ${f/_BGsub/})
+        BGsub=$(awk '{sum += $4*($3-$2)}END{printf("%8.2f",sum)}' $f)
+        total_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' ${f/_BGsub/})
+        BGsub_pos=$(awk '{if($4 > 0){sum += ($3-$2)}}END{printf("%8.2f",sum)}' $f)
+        echo "${f/_BGsub.bedgraph/} $total $BGsub $total_pos $BGsub_pos" >> BGsubs.stats
+    done
+```
+
+
+#### load those stats to R
+
+```{r}
+(stats_2min <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/BGsubs.stats', header=TRUE) %>% tbl_df %>%
   mutate(file = sub('^norm_', '', file) %>% 
            sub('_plus_KevinRoyAfiltered', '', .) %>%
            sub('_minus_KevinRoyAfiltered', '', .)) %>%
@@ -215,39 +374,42 @@ for f in *neg*.bedgraph
   separate(file, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop'))
 ```
 
+--> again good that background subtraction sets negative IP to exactly 0
+
 
 #### santiy check BGsub = raw - BG
 ```{r}
-BG_stats <- filter(stats, rapa == 'neg0') %>%
+(BG_stats_2min <- filter(stats_2min, rapa == 'neg0', fraction == 'ip') %>%
   dplyr::rename(BG_raw_signal=sum_raw_signal) %>%
-  dplyr::select(Pap, fraction, BG_raw_signal) 
+  dplyr::select(Pap, fraction, BG_raw_signal) )
 ```
 
 
 ```{r}
-BGsub_Sanity <- left_join(filter(stats, rapa != 'neg0'), BG_stats) %>%
-  mutate(raw_minus_BG = sum_raw_signal - BG_raw_signal,
-         BGsub_difference = sum_BGsub_signal - raw_minus_BG) %>%
-  arrange(BGsub_difference)
+(BGsub_Sanity_2min <- left_join(filter(stats_2min, rapa != 'neg0'), BG_stats_2min) %>%
+  mutate(BGsub_difference = sum_BGsub_signal - (sum_raw_signal - BG_raw_signal)) %>%
+  arrange(BGsub_difference) %>%
+   dplyr::select(-contains('position')))
 ```
 
-overall the is a minor discrepancy, ie less than 1 normalized read difference between normalized bedgraph counts and raw bedgraph minus mock counts -> possible rounding errors, did not try to hunt this down.
+overall there is a minute discrepancy, ie less than 1 normalized read difference between normalized bedgraph counts and raw bedgraph minus mock counts -> possible rounding errors, did not try to hunt this down.
+
 
 
 #### visualize the signal stats
 
 ```{r}
-(stats_signal <- stats %>%
+(stats_2min_signal <- stats_2min %>%
   dplyr::select(-sum_raw_positions, -sum_BGsub_position) %>%
   gather(signal_type, sum_signal, -Pap, -strain, -fraction, -rapa, -rep))
 ```
 
 ```{r}
-filter(stats_signal, rapa == 0)
+filter(stats_2min_signal, rapa == 0)
 ```
 
-```{r raw vs BGsub signal}
-filter(stats_signal, rapa == 0 | rapa == 'neg0') %>%
+```{r 2min data raw vs BGsub signal}
+filter(stats_2min_signal, rapa == 0 | rapa == 'neg0') %>%
   ggplot(., aes(x=rep, y=sum_signal, fill=signal_type)) +
   geom_bar(stat='identity', position='dodge') +
   facet_grid(fraction ~ Pap+strain+rapa) +
@@ -260,17 +422,17 @@ filter(stats_signal, rapa == 0 | rapa == 'neg0') %>%
 
 note: script only counts positions above background!  
 ```{r}
-(stats_pos <- stats %>%
+(stats_2min_pos <- stats_2min %>%
   dplyr::select(-sum_raw_signal, -sum_BGsub_signal) %>%
   gather(signal_type, positive_positions, -Pap, -strain, -fraction, -rapa, -rep))
 ```
 
 ```{r}
-filter(stats_pos, rapa == 0)
+filter(stats_2min_pos, rapa == 0)
 ```
 
-```{r raw vs BGsub above 0 positions}
-filter(stats_pos, rapa == 0) %>%
+```{r 2min data raw vs BGsub above 0 positions}
+filter(stats_2min_pos, rapa == 0) %>%
   ggplot(., aes(x=rep, y=positive_positions, fill=signal_type)) +
   geom_bar(stat='identity', position='dodge') +
   facet_grid(fraction ~ Pap+strain) +
@@ -281,24 +443,24 @@ filter(stats_pos, rapa == 0) %>%
 
 
 
-####some sanity check:
+#### some extra sanity check:
 ```{bash, eval = FALSE}
 ### sanity check
 
 awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph
-#[260119.44332784]
+#[259324.38465475]
 awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
-#[182502.68162595]
+#[180113.65800485]
 awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bedgraph
-#[77616.76170200]
+#[79210.72665005]
 
 
 awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_minus_KevinRoyAfiltered.bedgraph
-#[250323.16300884]
+#[249558.06504378]
 awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_neg0_1_minus_KevinRoyAfiltered.bedgraph
-#[172049.83961095]
+#[169797.62927088]
 awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_minus_KevinRoyAfiltered_BGsub.bedgraph
-#[78273.32339800]
+#[79760.43577305]
 
 
 
@@ -306,80 +468,38 @@ awk '{sum += $4*($3-$2)}END{printf("[%8.8f]\n",sum)}' norm_noPap_Mex67AA_ip_0_1_
 
 ip_file="norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph"
 awk '$1=="chrV" && $2 == 424882' $ip_file
-#chrV    424882  424883  22.7571
+#chrV	424882	424883	22.6875
 
 
-negip_file=$(echo $ip_file | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
-echo $negip_file
-#norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
-awk '$1=="chrV" && $2 == 424882' $negip_file
-#chrV    424882  424883  136.072
+noPap_negip_file="norm_noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph"
+awk '$1=="chrV" && $2 == 424882' $noPap_negip_file
+#chrV	424882	424883	134.291
 
 awk '$1=="chrV" && $2 == 424882' ${ip_file/.bedgraph/_BGsub.bedgraph}
-#chrV    424882  424883  -113.3149
-
-
-bedtools intersect -loj -a $ip_file -b $negip_file | \
-    awk '{OFS="\t"}{if($5 != "."){$9=$4-$8}else{$9=$4};print $0}' | \
-    cut -f 1-3,9 | \
-    awk '$1=="chrV" && $2 == 424882'
-#chrV    424882  424883  -113.315
+#chrV	424882	424883	-111.6035
 
 
 
 ip_file2="norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph"
 awk '$1=="chrV" && $2 == 424882' $ip_file2
-#chrV    424882  424883  44159.2
+#chrV	424882	424883	44904.3
 
-negip_file2=$(echo $ip_file2 | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
-echo $negip_file2
-#norm_xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
-awk '$1=="chrV" && $2 == 424882' $negip_file2
-#chrV    424882  424883  43777.5
+xPap_negip_file="norm_xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph"
+awk '$1=="chrV" && $2 == 424882' $xPap_negip_file
+#chrV	424882	424883	44102.1
 
 awk '$1=="chrV" && $2 == 424882' ${ip_file2/.bedgraph/_BGsub.bedgraph}
-#chrV    424882  424883  381.7
-
-
-bedtools intersect -loj -a $ip_file2 -b $negip_file2 | \
-    awk '{OFS="\t"}{if($5 != "."){$9=$4-$8}else{$9=$4};print $0}' | \
-    cut -f 1-3,9 | \
-    awk '$1=="chrV" && $2 == 424882'
-#chrV    424882  424883  381.7
+#chrV	424882	424883	802.2
 
 
 
 ip_file3="norm_xPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph"
 awk '$1=="chrV" && $2 == 424882' $ip_file3
-#chrV    424882  424883  29395.6
-
-awk '$1=="chrV" && $2 == 424882' ${ip_file3/ip_0_1/ip_0_2}
-#chrV    424882  424883  46504.9
-
-awk '$1=="chrV" && $2 == 424882' ${ip_file3/ip_0_1/ip_0_3}
-#chrV    424882  424883  39831.2
-
-
-
-
-negip_file3=$(echo $ip_file3 | sed s/Nab2AA/Mex67AA/g | sed s/ip_0/ip_neg0/g | sed s/neg0_2_/neg0_1_/g | sed s/neg0_3_/neg0_1_/g)
-echo $negip_file3
-#norm_xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph
-awk '$1=="chrV" && $2 == 424882' $negip_file3
-#chrV    424882  424883  43777.5
-
-
+#chrV	424882	424883	29549.6
 
 awk '$1=="chrV" && $2 == 424882' ${ip_file3/.bedgraph/_BGsub.bedgraph}
-#chrV    424882  424883  -14381.9
+#chrV	424882	424883	-14552.5
 
-
-
-bedtools intersect -loj -a $ip_file3 -b $negip_file3 | \
-    awk '{OFS="\t"}{if($5 != "."){$9=$4-$8}else{$9=$4};print $0}' | \
-    cut -f 1-3,9 | \
-    awk '$1=="chrV" && $2 == 424882'
-#chrV    424882  424883  -14381.9
 ```
 
 --> everything behaves as expected, seems to be OK..

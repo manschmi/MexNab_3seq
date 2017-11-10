@@ -56,6 +56,14 @@ ggplot(LFC_spread, aes(x=Mex_in_15rel0, y=Nab_in_15rel0)) +
   scatter_theme
 ```
 
+#### number of genes in plot
+```{r}
+LFC_spread %>%
+  filter(!is.na(Mex_in_15rel0), !is.na(Nab_in_15rel0), is.finite(Mex_in_15rel0), is.finite(Nab_in_15rel0)) %>%
+  group_by(type) %>%
+  summarise(n = n())
+```
+
 #### mean and medians
 ```{r}
 LFC_spread %>%
@@ -64,8 +72,11 @@ LFC_spread %>%
   summarise(mean_mex = mean(Mex_in_15rel0),
             median_mex = median(Mex_in_15rel0),
             mean_nab = mean(Nab_in_15rel0), 
-            median_nab = median(Nab_in_15rel0))
+            median_nab = median(Nab_in_15rel0),
+            n = n())
 ```
+
+note: no infinites in the log2FCs
 
 #### pearson correlation
 ```{r}
@@ -204,6 +215,15 @@ ggplot(LFC_spread_sig0, aes(x=Mex_ip_15rel0, y=Nab_ip_15rel0)) +
     scatter_theme
 ```
 
+#### number of genes in plot
+```{r}
+LFC_spread_sig0 %>%
+  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0), is.finite(Mex_ip_15rel0), is.finite(Nab_ip_15rel0)) %>%
+  group_by(type) %>%
+  summarise(n = n())
+```
+
+
 #### mean and medians
 ```{r}
 LFC_spread_sig0 %>%
@@ -212,7 +232,8 @@ LFC_spread_sig0 %>%
   summarise(mean_mex = mean(Mex_ip_15rel0),
             median_mex = median(Mex_ip_15rel0),
             mean_nab = mean(Nab_ip_15rel0), 
-            median_nab = median(Nab_ip_15rel0))
+            median_nab = median(Nab_ip_15rel0),
+            n = n())
 ```
 
 #### pearson correlation

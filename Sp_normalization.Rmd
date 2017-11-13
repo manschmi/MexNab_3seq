@@ -419,6 +419,57 @@ while read sf
 ####  sanity check
 
 ```{bash, eval=FALSE}
+## before S.pombe normalization
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/
+
+rm tmp
+for f in *_plus_KevinRoyAfiltered.bedgraph
+  do
+    echo ${f/_plus_KevinRoyAfiltered.bedgraph/} >> tmp
+    awk '{sum+=$4*($3-$2)}END{print sum}' $f ${f/plus/minus} >> tmp
+  done
+
+cat tmp | paste - - > total_reads_before_norm.txt
+rm tmp
+
+
+cat total_reads_before_norm.txt
+#noPap_Mex67AA_input_0_1	2202503
+#noPap_Mex67AA_input_15_1	2963985
+#noPap_Mex67AA_input_70_1	2387948
+#noPap_Mex67AA_ip_0_1	2579454
+#noPap_Mex67AA_ip_15_1	1837564
+#noPap_Mex67AA_ip_70_1	1054532
+#noPap_Mex67AA_ip_neg0_1	3116325
+#noPap_Nab2AA_input_0_1	2313940
+#noPap_Nab2AA_input_15_1	3235115
+#noPap_Nab2AA_ip_0_1	1769572
+#noPap_Nab2AA_ip_15_1	1905171
+#xPap_Mex67AA_input_0_1	3654903
+#xPap_Mex67AA_input_15_1	5390170
+#xPap_Mex67AA_input_70_1	3825320
+#xPap_Mex67AA_ip_0_1	2648241
+#xPap_Mex67AA_ip_0_2	3022976
+#xPap_Mex67AA_ip_0_3	2310471
+#xPap_Mex67AA_ip_15_1	2904716
+#xPap_Mex67AA_ip_15_2	3379732
+#xPap_Mex67AA_ip_15_3	2072147
+#xPap_Mex67AA_ip_70_1	4265182
+#xPap_Mex67AA_ip_70_2	2950139
+#xPap_Mex67AA_ip_70_3	2784526
+#xPap_Mex67AA_ip_neg0_1	3153307
+#xPap_Nab2AA_input_0_1	3822077
+#xPap_Nab2AA_input_15_1	3530828
+#xPap_Nab2AA_ip_0_1	1888025
+#xPap_Nab2AA_ip_0_2	2815418
+#xPap_Nab2AA_ip_0_3	2214857
+#xPap_Nab2AA_ip_15_1	1901498
+#xPap_Nab2AA_ip_15_2	2208254
+#xPap_Nab2AA_ip_15_3	1902227
+
+
+
+## after S.pombenormalization
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
 
 rm tmp
@@ -471,6 +522,19 @@ cat total_reads_after_norm.txt
 #### normalized reads check in R
 
 ```{r}
+(raw_reads <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/total_reads_before_norm.txt',
+           col.names=c('file', 'raw_reads')))
+```
+
+```{r raw reads barplot 2min data}
+raw_reads %>%
+  separate(file, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_') %>%
+  ggplot(., aes(x=rep, y=raw_reads)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_grid(Pap+fraction~strain+rapa, scales='free')
+```
+
+```{r}
 (norm_reads <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/total_reads_after_norm.txt',
            col.names=c('file', 'norm_reads')))
 ```
@@ -484,6 +548,25 @@ norm_reads %>%
 ```
 
 --> similar samples have very similar read counts but between ie ip vs input and xPap vs noPap there are huge differences.
+
+
+## compare counts relative to size factors
+
+```{r}
+(Sp_genes_sf <- read.table('data/Sp_2min_genes_sf.txt', 
+                          col.names=c('file', 'sf')))
+```
+
+
+```{r sizeFactor vs raw rel norm ratios 2min data}
+left_join(raw_reads, norm_reads %>%
+            mutate(file=sub('norm_', '', file))) %>%
+  left_join(., Sp_genes_sf) %>%
+  mutate(ratio = raw_reads/norm_reads) %>%
+  ggplot(., aes(x=sf, y=ratio)) +
+  geom_point() +
+  geom_abline(slope=1)
+```
 
 ```{r}
 sessionInfo()

@@ -1,5 +1,5 @@
 ---
-title: 'Junction reads & Intron vs Exon'
+title: 'Junction Reads & Intron vs Exon'
 author: "Manfred Schmid"
 output: html_document
 ---
@@ -18,11 +18,45 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
 suppressWarnings(library(tidyverse))
 suppressWarnings(library(magrittr))
 suppressWarnings(library(knitr))
+suppressWarnings(library(broom))
+
 ```
+
+
+# heatmaps
+
+
+```{bash, eval = FALSE}
+### ORFT introns ###
+introns="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
+
+
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
+
+##rapa 0 rep 1 samples
+plus_bw="*_0_1*_plus*.bw"
+minus_bw=${plus_bw/plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+### xORF-T introns scale-region pm 1k
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
+$introns "$plus_bw" "$minus_bw" \
+1000 2000 TES deeptools_out/ORFT/introns_0_1_3ssm1p2k "--binSize=10 --missingDataAsZero"
+
+#log2 counts
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/ORFT/introns_0_1_3ssm1p2k_joined.gz
+
+plotHeatmap -m deeptools_out/ORFT/introns_0_1_3ssm1p2k_joined_log2.gz \
+      --sortUsing region_length --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/ORFT/introns_0_1_3ssm1p2k_joined_log2_heatmap.pdf
+```
+
 
 # Junction Reads
 
-### Collect Junction Reads
+### Collect Junction Reads 3end seq 4tU data
 
 using python script *count_junctions.py*
 ```{python, eval = FALSE}
@@ -255,25 +289,47 @@ print HTSeq.__version__
 
 
 
+
+### Collect Junction Reads regular RNAseq data
+
+```{bash, eval = FALSE}
+#!/bin/sh
+ 
+##NOTE: use local python with HTSeq installed
+
+cd /Volumes/GenomeDK/Nab2AA_RNASeq/mapping/STAR/STARmapped_bams
+
+bed="/Volumes/GenomeDK/annotations/sacCer3_Sp_merged_genome/anno/sacCer3_ORFT_introns.bed"
+
+bam="bc_ctr_rep1_t30_adaptor_trimmedAligned.sortedByCoord.out.bam"
+python /Volumes/GenomeDK/ms_tools/MS_Metagene_Tools/count_junctions.py $bam $bed --expand_size 50 --reportOverlapLength > ${bam/.bam/_junctions.countsv2}
+
+bam="bc_ctr_rep2_t30_adaptor_trimmedAligned.sortedByCoord.out.bam"
+python /Volumes/GenomeDK/ms_tools/MS_Metagene_Tools/count_junctions.py $bam $bed --expand_size 50 --reportOverlapLength > ${bam/.bam/_junctions.countsv2}
+
+
+echo "done"
+```
+
+--> copy to local folder  
+
+
 ### Load the junction reads in R
 
-#### load bam file name map
+#### load 2' 4tU bam file name map
 
 ```{r}
-(bam_files <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/file_rename_map_Lexogen2.txt',
-           col.names = c('simple_name', 'bam_name')) %>%
+(bam_files <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/file_rename_map_Lexogen2.txt', stringsAsFactors = FALSE,
+           col.names = c('simple_name', 'bam_file')) %>%
   tbl_df)
-
-bam_file_map <- bam_files$simple_name
-names(bam_file_map) <- bam_files$bam_name
 ```
 
 
-#### load counts
+#### load counts 2min 4tU data
 ```{r}
 path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/splicing_stuff/junctions/'
 
-sfx <- 'junctions.countsv2'
+sfx <- '.outjunctions.countsv2'
 
 files <- dir(path) %>% keep(grepl(sfx, .))
 
@@ -281,17 +337,22 @@ file <- files[1]
 
 (d <- lapply(files, function(file) {read.table(paste0(path,file), 
                                               header=T, sep='\t', stringsAsFactors = FALSE) %>%
-                                   mutate(condition = bam_file_map[sub(sfx, '', file)]) %>%
-                                   tbl_df}) %>%
+    mutate(bam_file = sub('junctions.countsv2', '', file)) %>%
+    tbl_df}) %>%
   bind_rows)
+
+
+
+d %<>% left_join(., bam_files) 
+                                   
 ```
 
 ```{r}
 (junctions <- d %>%
   mutate(SD_SA_mean = (SD + SA)/2) %>%
-  select(id, EE, SD_SA_mean, condition) %>%
-  gather(read_type, count, -id, -condition) %>%
-  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_'))
+  select(id, EE, SD_SA_mean, simple_name) %>%
+  gather(read_type, count, -id, -simple_name) %>%
+  separate(simple_name, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_'))
 ```
 
 Sum up for each sample and junction type
@@ -339,7 +400,7 @@ Therefore:
 #### normalize to S.pombe
 
 ```{r}
-(sf <- read.table('data/Sp_genes_sf.txt', col.names=c('condition', 'sf')) %>%
+(sf <- read.table('data/Sp_2min_genes_sf.txt', col.names=c('condition', 'sf')) %>%
   separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_') %>%
   tbl_df)
 ```
@@ -412,20 +473,61 @@ BGsub_norm_junctions_sum %>%
 ```
 
 
+#### load counts regular RNAseq
+```{r}
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/splicing_stuff/junctions/'
+
+sfx <- '_adaptor_trimmedAligned.sortedByCoord.out_junctions.countsv2'
+
+files <- dir(path) %>% keep(grepl(sfx, .))
+
+
+(d <- lapply(files, function(file) {read.table(paste0(path,file), 
+                                              header=T, sep='\t', stringsAsFactors = FALSE) %>%
+    mutate(bam_file = sub(sfx, '', file)) %>%
+    tbl_df}) %>%
+  bind_rows)
+```
+
+```{r}
+(junctions_RNAseq <- d %>%
+  mutate(SD_SA_mean = (SD + SA)/2) %>%
+  select(id, EE, SD_SA_mean, bam_file) %>%
+  gather(read_type, count, -id, -bam_file) %>%
+  separate(bam_file, c('strain', 'rep', 'rapa'), sep='_'))
+```
+
+Sum up for each sample and junction type
+```{r}
+(junctions_RNAseqsum <- junctions_RNAseq %>%
+  group_by(strain, rapa, rep, read_type) %>%
+  summarize(count = sum(count)))
+```
+
+```{r barplot junction counts sum RNAseq}
+(junctions_RNAseqsum %>%
+  ggplot(., aes(x=rep, y=count, fill=read_type)) +
+  geom_bar(stat='identity', position='dodge') +
+  scale_fill_brewer(palette = 'Set1') +
+  facet_grid(rapa~strain) +
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45)))
+```
+
+
+
 # intron vs exon signal
 
 ## count and load intron and exon signal
 
-#### count
+#### prepare intron and exon2 regions
 ```{bash, eval = FALSE}
 introns="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
 ORFs="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
 
 # introns are from SGD for sacCer3
 
-
-##make exon2 annotations
-
+## make exon2 annotations
 bedtools intersect -wao -a $ORFs -b $introns | \
 awk '{
   if($13 > 0){
@@ -443,36 +545,56 @@ awk '{
 
 exon2s="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed"
 
-
-####### average of intron and exon2
-
-## introns
+## split strands 
+# introns
 awk '$6 == "+"' $introns | cut -f 1-4 | awk '{if(name != $4){print $0}; name=$4}' > ${introns/.bed/_plus.bed}
 awk '$6 == "-"' $introns | cut -f 1-4 | awk '{if(name != $4){print $0}; name=$4}' > ${introns/.bed/_minus.bed}
-## exon2
+# exon2
 awk '$6 == "+"' $exon2s | cut -f 1-4 | awk '{if(name != $4){print $0}; name=$4}' > ${exon2s/.bed/_plus.bed}
 awk '$6 == "-"' $exon2s | cut -f 1-4 | awk '{if(name != $4){print $0}; name=$4}' > ${exon2s/.bed/_minus.bed}
 ## exon2 but removing 3' end region TES -200bp
 awk '$6 == "+"' $exon2s | cut -f 1-4 | awk '{if(name != $4){$3-=200;print $0}; name=$4}' > ${exon2s/.bed/_endm200_plus.bed}
 awk '$6 == "-"' $exon2s | cut -f 1-4 | awk '{if(name != $4){$2+=200;print $0}; name=$4}' > ${exon2s/.bed/_endm200_minus.bed}
 
+```
 
-for f in $plus_bw
+#### count signal in introns and exon2
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw
+
+introns="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
+
+exon2s="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed"
+
+
+
+for f in *plus*.bw
   do
     echo $f
+    
     outfname=$(echo $f | sed s/_plus_KevinRoyAfiltered//g | sed s/\.bw//g | sed s/_BGsub//g)
 
-    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${introns/.bed/_plus.bed} introns_plus.tab
-    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${introns/.bed/_minus.bed} introns_minus.tab
-    cat introns_plus.tab introns_minus.tab > bwtool_out/${outfname}"_introns.tab"
+    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${introns/.bed/_plus.bed} tmp_plus.tab
+    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${introns/.bed/_minus.bed} tmp_minus.tab
+    cat tmp_plus.tab tmp_minus.tab > bigWigAverageOverBed_counts/${outfname}"_introns.tab"
 
-    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_plus.bed} exon2s_plus.tab
-    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_minus.bed} exon2s_minus.tab
-    cat exon2s_plus.tab exon2s_minus.tab > bwtool_out/${outfname}"_exon2s.tab"
+    rm tmp_plus.tab
+    rm tmp_minus.tab
 
-    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_endm200_plus.bed} exon2s_endm200_plus.tab
-    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_endm200_minus.bed} exon2s_endm200_minus.tab
-    cat exon2s_endm200_plus.tab exon2s_endm200_minus.tab > bwtool_out/${outfname}"_exon2s_endm200.tab"
+    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_plus.bed} tmp_plus.tab
+    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_minus.bed} tmp_minus.tab
+    cat tmp_plus.tab tmp_minus.tab > bigWigAverageOverBed_counts/${outfname}"_exon2s.tab"
+
+    rm tmp_plus.tab
+    rm tmp_minus.tab
+
+    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_endm200_plus.bed} tmp_plus.tab
+    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_endm200_minus.bed} tmp_minus.tab
+    cat tmp_plus.tab tmp_minus.tab > bigWigAverageOverBed_counts/${outfname}"_exon2s_endm200.tab"
+    
+    rm tmp_plus.tab
+    rm tmp_minus.tab
+
   done
 ```
 
@@ -480,7 +602,7 @@ for f in $plus_bw
 #### load into R
 
 ```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bwtool_out/'
+path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bigWigAverageOverBed_counts/'
 
 intron_files <- dir(path) %>% keep(grepl('_introns.tab$', .))
 simple_names <- sub('_introns.tab', '', intron_files) %>% sub('norm_', '', .)
@@ -503,22 +625,19 @@ exon2s <- lapply(seq_along(exon2_files), function(i) read.table(paste0(path, exo
   bind_rows %>%
   separate(name, c('id', 'type', 'name', 'common_name'), sep=':') %>%
   tbl_df
+```
 
+
+several genes are not covered in exon2 due to end restriction ...
+
+```{r}
+introns %<>% filter(name %in% exon2s$name)
+exon2s %<>% filter(name %in% introns$name)
+```
+
+```{r}
 (exon_intron <- bind_rows(introns, exon2s) %>%
     separate(file, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_'))
-```
-
-
-2 genes are left without exon2 due to end restriction ...
-
-```{r}
-filter(exon_intron, size <= 0) %>%
-  distinct(part, name)
-```
-
-remove them
-```{r}
-exon_intron %<>% filter(name != 'YML036W', name != 'YGL076C')
 ```
 
 
@@ -580,10 +699,11 @@ exon_intron %>%
 
 #### exon/intron ratio
 ```{r}
-(exon_intron_wide <- exon_intron %>%
+(exon_intron_wide <- exon_intron%>%
   dplyr::select(name, part, mean, Pap, strain, fraction, rapa, rep) %>%
   spread(part, mean) %>%
-   mutate(intron_rel_exon2 = intron/exon2))
+   mutate(intron_rel_exon2 = intron/exon2) %>%
+   filter(rapa != 70, exon2 > 0 | intron > 0) )
 ```
 
 ```{r violins intron rel exon ratio raw}
@@ -650,11 +770,13 @@ exon_intron_wide %>%
 
 ```{r}
 exon_intron_wide %>%
+  filter(rapa != 70) %>%
   mutate(intron = ifelse(intron <= 0, pseudocount, intron + pseudocount),
          exon2 = ifelse(exon2 <= 0, pseudocount, exon2 + pseudocount),
          intron_rel_exon2 = intron/exon2) %>%
   group_by(fraction, Pap, strain, rapa, rep) %>%
-  do(tidy(summary(.$intron_rel_exon2)))
+  do(tidy(summary(.$intron_rel_exon2))) %>%
+  kable
 ```
 
 ```{r}

@@ -472,6 +472,17 @@ BGsub_norm_junctions_sum %>%
   theme(axis.text.x=element_text(hjust=1, angle=45))
 ```
 
+```{r barplot junction counts sum normalized to Spombe and BGsub rapa 0 rep 1}
+BGsub_norm_junctions_sum %>%
+   filter(rapa == 0, rep == 1) %>%
+  ggplot(., aes(x=fraction, y=BGsub_norm_count_sum, fill=read_type)) +
+  geom_bar(stat='identity', position='dodge') +
+  scale_fill_brewer(palette = 'Set1') +
+  facet_grid(rapa+strain~Pap) +
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45))
+```
+
 
 #### load counts regular RNAseq
 ```{r}

@@ -11,6 +11,7 @@ output: html_document
 #!/usr/bin/env bash
 
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/
+
 genome_info="/Users/schmidm//Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin_chrM.info"
 
 
@@ -27,6 +28,13 @@ do
 done
 ```
 
+#### remove empty files
+
+negative IP minus background gives all 0 values -> empty bigwigs, remove those
+
+```{bash, eval = FALSE}
+rm /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/*ip_neg*BGsub.bw
+```
 
 
 ```{r}

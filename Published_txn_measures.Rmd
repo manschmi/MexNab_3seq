@@ -1,0 +1,478 @@
+---
+title: 'Published txn estimates, mean counts per gene body'
+author: "Manfred Schmid"
+output: html_document
+---
+
+```{r, echo=TRUE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_published_txn_estimates_gene_body_counting/'), 
+                      dev='pdf', echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(knitr))
+```
+
+The idea here is that different techniques measure RNAPII, they should have same "coverage" as our technique inside gene bodies.
+On a metagene level that is the same "mean" value inside gene bodies.
+So count up these for the different datasets.
+I use bigWigAverageOverBed from UCSC tools for this. Here column mean0 (nr. 5) gives the mean couting non-covered bases as 0.
+
+
+## NETseq
+
+#### count
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/bw
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+plus_bw="GSM617027_WT_NC_plus_sacCer3.bw"
+/Users/schmidm/ms_tools/bigWigAverageOverBed $plus_bw $body_plus_bed tmp_plus.count
+
+/Users/schmidm/ms_tools/bigWigAverageOverBed ${plus_bw/plus/minus} $body_minus_bed tmp_minus.count
+
+cat tmp_plus.count tmp_minus.count > ../averageOverBed/${plus_bw/_plus_sacCer3.bw/_body_endsm200_cleaned.counts}
+
+rm tmp_*us.count
+```
+
+### load into R and save
+```{r, warning=FALSE, message=FALSE}
+(netseq_ucsc_means <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/averageOverBed/GSM617027_WT_NC_body_endsm200_cleaned.counts', col_names = c('name', 'size', 'covered', 'sum', 'mean0', 'mean')))
+```
+
+```{r}
+(netseq_ucsc_means %<>%
+  dplyr::select(name, size, mean0) %>%
+  dplyr::rename(NETseq_mean = mean0))
+```
+
+```{r}
+save(netseq_ucsc_means, file='data/NETseq_body_mean.RData')
+```
+
+
+
+
+## CRAC Milligan
+
+#### count
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/bw
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+plus_bw="GSM1706520_Rpo21_nabFT_plus.bw"
+/Users/schmidm/ms_tools/bigWigAverageOverBed $plus_bw $body_plus_bed tmp_plus.count
+
+/Users/schmidm/ms_tools/bigWigAverageOverBed ${plus_bw/plus/minus} $body_minus_bed tmp_minus.count
+
+cat tmp_plus.count tmp_minus.count > ../averageOverBed/${plus_bw/_plus.bw/_body_endsm200_cleaned.counts}
+
+rm tmp_*us.count
+```
+
+
+### load into R and save
+```{r, warning=FALSE, message=FALSE}
+(crac_ucsc_means <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/averageOverBed/GSM1706520_Rpo21_nabFT_body_endsm200_cleaned.counts', col_names = c('name', 'size', 'covered', 'sum', 'mean0', 'mean')))
+```
+
+```{r}
+(crac_ucsc_means %<>%
+  dplyr::select(name, size, mean0) %>%
+  dplyr::rename(CRAC_mean = mean0))
+  
+```
+
+```{r}
+save(crac_ucsc_means, file='data/CRAC_body_mean.RData')
+```
+
+
+## compare CRAC and NETseq
+
+```{r CRAC vs NETseq scatter}
+left_join(netseq_ucsc_means, crac_ucsc_means) %>%
+  ggplot(., aes(x=CRAC_mean, y=NETseq_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+correlation, only genes positive in both:  
+```{r}
+left_join(netseq_ucsc_means, crac_ucsc_means) %>%
+  filter(NETseq_mean > 0, CRAC_mean > 0) %>%
+  do(tidy(cor.test(log2(.$CRAC_mean), log2(.$NETseq_mean), use='pairwise.complete')))
+```
+
+
+## Cramer Rpb3 chip-on-chip
+
+#### pre-processing
+We are taking data from Cramer labs Rpb3 chip on chip from ArrayExpress E-TABM-1033.  
+
+Raw file is a wig file, but intervals are overlapping, and its based on sacCer2 so takes a bit of pre-processing.  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+
+## file Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig is downloaded from ArrayExpress E-TABM-1033
+## this is Steinmetz tiling array format
+
+
+head Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig
+#track type=wiggle_0 name=Rpb3_InputAndMockNormalized
+#variableStep chrom=chrV span=25
+#1 0.108703797559
+#5 0.109159129901
+#9 0.108703797559
+#13 0.109159129901
+#17 0.108703797559
+#21 0.109159129901
+#25 0.109614462242
+#29 0.112107222775
+
+##largest position on each chromosome...
+awk '{
+  if($1 ~/^variableStep/ ){
+    print max_pos
+    print $0
+    max_pos=0
+  }else{
+    max_pos=$1
+  }
+}END{
+  print max_pos
+}' Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig | \
+sed 1d | paste - - | \
+sed s/"variableStep "//g | sed s/span=25//g | sed s/chrom=//g | sort -k1,1
+#chrI    230187
+#chrII   813156
+#chrIII  316590
+#chrIV   1531896
+#chrIX   439861
+#chrV    576846
+#chrVI   270125
+#chrVII  1090919
+#chrVIII         562616
+#chrX    745646
+#chrXI   666426
+#chrXII  1078148
+#chrXIII         924405
+#chrXIV  784312
+#chrXV   1091263
+#chrXVI  948039
+#
+#chr		sacCer1	sacCer2	sacCer3	##found max position(-25) on tiling wig data
+#chr01	230208	230208	230218	##230187
+#chr02	813136	813178	813184	##813156
+#chr03	316613	316617	316620	##316590
+#chr04	1531914	1531919	1531933	##1531896
+#chr05	576869	576869	576874	##576846
+#chr06	270148	270148	270161	##270125
+#chr07	1090944	1090947	1090940	##1090919
+#chr08	562639	562643	562643	##562616
+#chr09	439885	439885	439888	##439861
+#chr10	745446	745742	745751	##745646 -->!!
+#chr11	666445	666454	666816	##666426
+#chr12	1078173	1078175	1078177	##1078148
+#chr13	924430	924429	924431	##924405
+#chr14	784328	784333	784333	##784312
+#chr15	1091285	1091289	1091291	##1091263
+#chr16	948060	948062	948066	##948039
+#chr17	85779	85779	85779
+
+
+##genome version closely related to sacCer2
+## lift to sacCer3
+##UCSC sacCer2 = S288C_reference_genome_R61-1-1_20080605.tgz
+##UCSC sacCer3 = S288C_reference_genome_R64-1-1_20110203.tgz
+
+
+/Users/schmidm/ms_tools/wigToBigWig -clip Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer2/sacCer2_genome_latin.info Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.bw
+
+
+
+## for liftOver the chain file for sacCer2 to sacCer3 is :
+### V61_2008_06_05_V64_2011_02_03.over.chain
+cat /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer2/V61_2008_06_05_V64_2011_02_03.over.chain | sed 's/_...._.._.. / /g' > V61_2008_06_05_V64_2011_02_03_plain.over.chain
+
+#dummy command ./liftOver anno.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain converted.bed conversion_failed.bed
+
+f="Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.wig"
+
+cat $f | \
+grep -v ^track | \
+awk '{
+  if($1=="variableStep"){
+    if(chr!=""){
+      for(i=1;i<=max_pos;i++){
+        if(n[i]>0){
+          print chr"\t"i-1"\t"i"\t"ar[i]/n[i]
+        }
+        ar[i]=0
+        n[i]=0
+      }
+    }
+    chr=$2;
+    sub("chrom=","",chr);
+    span=$3;
+    sub("span=","",span);
+  }else{
+    max_pos=$1+span
+    for(i=$1;i<=($1+span);i++){
+      n[i]+=1
+      ar[i]+=$2
+    }
+  }
+}END{
+  for(i=1;i<=max_pos;i++){
+    if(n[i]>0){
+      print chr"\t"i-1"\t"i"\t"ar[i]/n[i]
+    }
+  }
+}' > ${f/.wig/.bedGraph}
+
+python ~/ms_tools/convert_chr_names2.py ${f/.wig/.bedGraph} -f latin -t roman0 > roman.bedGraph
+
+/Users/schmidm/Documents/genomewide_datasets/scripts/liftOver_and_conversionTools/liftOver roman.bedGraph V61_2008_06_05_V64_2011_02_03_plain.over.chain roman_converted.bed conversion_failed.bed
+
+python ~/ms_tools/convert_chr_names2.py roman_converted.bed -f roman0 -t latin > ${f/.wig/_sacCer3.bedGraph}
+
+sort -k1,1 -k2,2n ${f/.wig/_sacCer3.bedGraph} -o ${f/.wig/_sacCer3.bedGraph}
+
+/Users/schmidm/ms_tools/bedGraphToBigWig ${f/.wig/_sacCer3.bedGraph} /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info ${f/.wig/_sacCer3.bw}
+
+rm Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized_sacCer3.bedGraph
+rm Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized.bedGraph
+rm roman*
+
+```
+
+
+#### count
+
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+bw="Cramer_E_TABM_1033_Rpb3_InputAndMockNormalized_sacCer3.bw"
+/Users/schmidm/ms_tools/bigWigAverageOverBed $bw $body_plus_bed tmp_plus.count
+
+/Users/schmidm/ms_tools/bigWigAverageOverBed $bw $body_minus_bed tmp_minus.count
+
+cat tmp_plus.count tmp_minus.count > averageOverBed/${bw/_InputAndMockNormalized_sacCer3.bw/_body_endsm200_cleaned.counts}
+
+rm tmp_*us.count
+```
+
+
+#### load into R and save
+```{r, warning=FALSE, message=FALSE}
+(rpb3_chip2_ucsc_means <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Cramer_ChIPchip/averageOverBed/Cramer_E_TABM_1033_Rpb3_body_endsm200_cleaned.counts', col_names = c('name', 'size', 'covered', 'sum', 'mean0', 'mean')))
+```
+
+```{r}
+(rpb3_chip2_ucsc_means %<>%
+  dplyr::select(name, size, mean0) %>%
+  dplyr::rename(Chip2_mean = mean0))
+  
+```
+
+```{r}
+save(rpb3_chip2_ucsc_means, file='data/Rpb3ChIP2_body_mean.RData')
+```
+
+
+#### compare Rpb3 ChIP^2 and NETseq
+
+```{r ChIP^2 vs NETseq scatter}
+left_join(netseq_ucsc_means, rpb3_chip2_ucsc_means) %>%
+  ggplot(., aes(x=Chip2_mean, y=NETseq_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+
+## Henikoff Rpb3-FLAG ChIPseq
+
+We are taking data from Henikoffs lab ChIPseq for Rpb3 sample GSM2551210 from GSE97081.  
+
+#### pre-processing
+Raw file is a wig file mapped to sacCer3, though some intervals exceeding right end of each chromosome afaics. Did not investigate this further and used data as-is.  
+Processing:  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+
+## -> mapped to sacCer3, mentioned specifically at GEO
+## data is coverage normalized to S.pombe spike-ins
+
+awk '{
+  if($1 ~/^variableStep/ ){
+    print max_pos
+    print $0
+    max_pos=0
+  }else{
+    max_pos=$1
+  }
+}END{
+  print max_pos
+}' GSM2551210_WT_A_140.wig | \
+sed 1d | paste - - | \
+sed s/"variableStep "//g | sed s/span=1//g | sed s/chrom=//g | sort -k1,1
+
+# chrI   230217
+# chrII  813185
+# chrIII         316616
+# chrIV  1531912
+# chrIX  439889
+# chrM   85780
+# chrV   576871
+# chrVI  270162
+# chrVII         1090936
+# chrVIII        562650
+# chrX   745754
+# chrXI  666817
+# chrXII         1078177
+# chrXIII        924431
+# chrXIV         784338
+# chrXV  1091298
+# chrXVI         948062
+
+
+## only cerevisiae chromosomes in this file
+/Users/schmidm/ms_tools/wigToBigWig GSM2551210_WT_A_140.wig /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info GSM2551210_WT_A_140.bw
+## complains, look like wig file contains entries off chromosome end, just a few nts but still !!
+
+## also chrM not found in genome
+## -> fix this
+
+
+cat /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info | sed s/Mito/chrM/g > sacCer3_genome.info
+
+
+/Users/schmidm/ms_tools/wigToBigWig -clip GSM2551210_WT_A_140.wig sacCer3_genome.info GSM2551210_WT_A_140.bw
+#line 1959084 of GSM2551210_WT_A_140.wig: chromosome chrIX has 439888 bases, but item ends at 439889
+#line 3047743 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784334
+#line 3047744 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784335
+#line 3047745 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784336
+#line 3047746 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784337
+#line 3047747 of GSM2551210_WT_A_140.wig: chromosome chrXIV has 784333 bases, but item ends at 784338
+#line 4201663 of GSM2551210_WT_A_140.wig: chromosome chrM has 85779 bases, but item ends at 85780
+#line 5166715 of GSM2551210_WT_A_140.wig: chromosome chrX has 745751 bases, but item ends at 745752
+#line 5166716 of GSM2551210_WT_A_140.wig: chromosome chrX has 745751 bases, but item ends at 745753
+#line 5166717 of GSM2551210_WT_A_140.wig: chromosome chrX has 745751 bases, but item ends at 745754
+#line 8110064 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091292
+#line 8110065 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091293
+#line 8110066 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091294
+#line 8110067 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091295
+#line 8110068 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091296
+#line 8110069 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091297
+#line 8110070 of GSM2551210_WT_A_140.wig: chromosome chrXV has 1091291 bases, but item ends at 1091298
+#line 8669012 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562644
+#line 8669013 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562645
+#line 8669014 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562646
+#line 8669015 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562647
+#line 8669016 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562648
+#line 8669017 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562649
+#line 8669018 of GSM2551210_WT_A_140.wig: chromosome chrVIII has 562643 bases, but item ends at 562650
+#line 8934728 of GSM2551210_WT_A_140.wig: chromosome chrVI has 270161 bases, but item ends at 270162
+#line 9597240 of GSM2551210_WT_A_140.wig: chromosome chrXI has 666816 bases, but item ends at 666817
+#line 10400860 of GSM2551210_WT_A_140.wig: chromosome chrII has 813184 bases, but item ends at 813185
+
+```
+
+
+
+#### count  
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+
+#### gene body regions
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+
+bw="GSM2551210_WT_A_140.bw"
+/Users/schmidm/ms_tools/bigWigAverageOverBed $bw $body_plus_bed tmp_plus.count
+
+/Users/schmidm/ms_tools/bigWigAverageOverBed $bw $body_minus_bed tmp_minus.count
+
+cat tmp_plus.count tmp_minus.count > averageOverBed/${bw/_A_140.bw/_body_endsm200_cleaned.counts}
+
+rm tmp_*us.count
+```
+
+
+### load into R and save
+```{r, warning=FALSE, message=FALSE}
+(rpb3_chipseq_ucsc_means <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq/averageOverBed/GSM2551210_WT_body_endsm200_cleaned.counts', col_names = c('name', 'size', 'covered', 'sum', 'mean0', 'mean')))
+```
+
+```{r}
+(rpb3_chipseq_ucsc_means %<>%
+  dplyr::select(name, size, mean0) %>%
+  dplyr::rename(Chipseq_mean = mean0))
+  
+```
+
+```{r}
+save(rpb3_chipseq_ucsc_means, file='data/Rpb3ChIPseq_body_mean.RData')
+```
+
+
+#### compare Rpb3 ChIPseq and NETseq
+
+```{r ChIPseq vs NETseq scatter}
+left_join(netseq_ucsc_means, rpb3_chipseq_ucsc_means) %>%
+  ggplot(., aes(x=Chipseq_mean, y=NETseq_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+#### compare Rpb3 ChIPseq and ChIP^2
+
+```{r ChIPseq vs ChIP1 scatter}
+left_join(rpb3_chip2_ucsc_means, rpb3_chipseq_ucsc_means) %>%
+  ggplot(., aes(x=Chipseq_mean, y=Chip2_mean)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
+
+## combine all in one tbl
+
+```{r}
+(txn_estimates <- left_join(rpb3_chip2_ucsc_means, rpb3_chipseq_ucsc_means) %>%
+  left_join(., netseq_ucsc_means) %>%
+  left_join(., crac_ucsc_means))
+```
+
+
+```{r}
+save(txn_estimates, file='data/published_gene_body_txn_estimates.RData')
+```
+
+```{r}
+sessionInfo()
+```

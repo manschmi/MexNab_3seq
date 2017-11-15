@@ -1,0 +1,237 @@
+---
+title: "Count body and end signal for the various samples and tracks"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_counting/', dev='pdf')
+```
+
+```{r, message=FALSE,warning=FALSE}
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
+```
+
+
+Using scaled S.pombe normalized and BGsub data from *body_end_counting.Rmd* and *2min_body_end_counts_to_R.Rmd*.  
+
+
+## Load body and end counts
+
+these are BGsub and normalized to S.pombe.
+```{r}
+load('data/norm_2min_body_end_scaled_and_BGsub.RData', verbose = TRUE)
+
+both_df
+```
+
+How many ids per annotation type:  
+```{r}
+distinct(both_df, type, id) %>% 
+  group_by(type) %>% 
+  summarize(cnt=n())
+```
+
+
+
+## Barplots signal at End vs body pA+ vs pA-
+
+Global distribution of pA+ and pA- signal in gene body an gene end regions.
+
+```{r}
+(both_totals <- both_df %>%
+  group_by(type, Pap, strain,fraction, rapa, part, pA, rep) %>% 
+  summarize(total_Spnorm_signal = sum(sum)))
+```
+
+```{r barplot total all samples }
+both_totals %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r barplot total all samples only ORFs}
+both_totals %>%
+  filter(type == 'ORF-T') %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+--> ups negatives appear, possibly due to BGsub and pAminus procedures !
+
+
+#### non-negative total signal
+
+```{r}
+(non_neg_totals <- both_df %>%
+   mutate(sum = ifelse(sum < 0, 0, sum)) %>%
+  group_by(type, Pap, strain,fraction, rapa, part, pA, rep) %>% 
+  summarize(total_Spnorm_signal = sum(sum)))
+```
+
+```{r barplot non-negative totals all samples }
+non_neg_totals %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r barplot non-negative totals all samples only ORFs}
+non_neg_totals %>%
+  filter(type == 'ORF-T') %>%
+  group_by(part, pA, fraction, strain, rapa, rep) %>%
+  summarize(all_types_total_Spnorm_signal = sum(total_Spnorm_signal)) %>%
+ggplot(., aes(x=part, y=all_types_total_Spnorm_signal, fill=part)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+#### non-negative total signal per type
+
+```{r barplot non-neg signal per type and part}
+non_neg_totals %>%
+  filter(rapa == '0', rep == '1') %>%
+  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~part+strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45))
+```
+
+```{r barplot non-neg signal per type wo part}
+non_neg_totals %>%
+  filter(rapa == '0', rep == '1') %>%
+  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45))
+```
+
+```{r barplot non-neg signal per type wo part for Figure}
+non_neg_totals %>%
+  filter(rapa == 0, rep == 1, 
+         pA == 'pA+' | pA == 'pA-',
+         type != 'other') %>%
+  ungroup %>%
+  mutate(pA = factor(pA, levels=c('pA+', 'pA+ + pA-', 'pA-', 'pA-X'))) %>%
+  ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x=element_text(hjust=1, angle=45))
+```
+
+
+## pAplus vs pAminus body vs end piecharts
+
+```{r}
+(body_end_percents <- non_neg_totals %>%
+   group_by(type, pA, strain, fraction, rapa, rep) %>%
+   mutate(total_Spnorm_signal_percent = 100 * total_Spnorm_signal / sum(total_Spnorm_signal)))
+```
+
+```{r piechart body vs end all rapa 0 rep 1}
+body_end_percents %>%
+  filter(rapa == 0, rep == 1) %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(type+strain~pA+fraction+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+```{r piechart body vs end all rapa 0 rep 1 for Figure}
+body_end_percents %>%
+  filter(rapa == 0, rep == 1, 
+         pA == 'pA+' | pA == 'pA-',
+         type != 'other', type != 'snRNA') %>%
+  ungroup %>%
+  mutate(pA = factor(pA, levels=c('pA+', 'pA+ + pA-', 'pA-', 'pA-X'))) %>%
+ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
+  geom_bar(stat='identity') +
+  coord_polar(theta='y') +
+  facet_grid(strain+type~pA+fraction+rapa+rep, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+## Violin plots per type and part
+
+
+#### violin plot fun
+```{r}
+violin_plot <- function(df) {
+  ggplot(df, aes(x=type, y=scaled_reads, fill=type)) +
+  geom_violin(scale='width') +
+  geom_boxplot(fill='gray', width=.2, outlier.shape = NA) +
+  facet_grid(strain+part~pA+fraction+rep, scales='free') +
+  scale_y_log10() +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust=1, angle=45))
+}
+```
+
+
+```{r violins all at once}
+violin_plot(both_df)
+```
+
+
+```{r violins rapa0 rep1}
+both_df %>%
+  filter(rep == 1, rapa == 0, type != 'other') %>%
+  violin_plot(.)
+```
+
+```{r violins rapa0 rep1 for Figure}
+both_df %>%
+  filter(rapa == 0, rep == 1, 
+         pA == 'pA+' | pA == 'pA-',
+         type != 'other') %>%
+  ungroup %>%
+  mutate(pA = factor(pA, levels=c('pA+', 'pA+ + pA-', 'pA-', 'pA-X'))) %>%
+  violin_plot(.)
+```
+
+
+```{r}
+sessionInfo()
+```
+
+
+

@@ -11,13 +11,14 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
                       error=TRUE)
 ```
 
-`r format(Sys.time(), "%d %B, %Y")`
+`r format(Sys.time(), "%d %B, %Y; %R")`
 
 
 ```{r load packages, echo=T, warning=F, message=F}
 suppressWarnings(library(tidyverse))
 suppressWarnings(library(magrittr))
 suppressWarnings(library(knitr))
+suppressWarnings(library(broom))
 ```
 
 The idea here is that different techniques measure RNAPII, they should have same "coverage" as our technique inside gene bodies.
@@ -27,6 +28,65 @@ I use bigWigAverageOverBed from UCSC tools for this. Here column mean0 (nr. 5) g
 
 
 ## NETseq
+
+#### pre-processing
+```{bash, eval = FALSE}
+# data are wig files from GSE25107
+#
+# according to GEO: using Saccharomyces Genome Database (SGD, http://www.yeastgenome.org/) on October 11, 2009
+## this would be close to sacCer2 ...
+
+
+## for liftOver the closest chain file I can get is:
+### V62_2009_02_18_V64_2011_02_03.over.chain
+
+cat V62_2009_02_18_V64_2011_02_03.over.chain | sed 's/_...._.._.. / /g' > V62_2009_02_18_V64_2011_02_03_plain.over.chain
+
+#dummy command ./liftOver anno.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain converted.bed conversion_failed.bed
+
+f="GSM617027_WT_NC_minus.wig"
+head  $f | \
+grep -v ^track | \
+awk '{if($1=="variableStep"){chr=$2;sub("chrom=","",chr)}else{print chr"\t"$1-1"\t"$1"\t"$2}}' > test.bed
+
+python ~/ms_tools/convert_chr_names2.py test.bed -f latin -t roman0 > testR.bed
+
+/Users/schmidm/Documents/genomewide_datasets/scripts/liftOver_and_conversionTools/liftOver testR.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain test_converted.bed conversion_failed.bed
+
+python ~/ms_tools/convert_chr_names2.py test_converted.bed -f roman0 -t latin > test.bed
+/Users/schmidm/ms_tools/bedGraphToBigWig test.bed /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info ${f/.wig/.bw}
+
+
+for f in *.wig
+	do
+		 cat  $f | grep -v ^track | awk '{if($1=="variableStep"){chr=$2;sub("chrom=","",chr)}else{print chr"\t"$1-1"\t"$1"\t"$2}}' > test.bed
+		
+		python ~/ms_tools/convert_chr_names2.py test.bed -f latin -t roman0 > testR.bed
+		
+		/Users/schmidm/Documents/genomewide_datasets/scripts/liftOver_and_conversionTools/liftOver testR.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain test_converted.bed conversion_failed.bed
+
+		python ~/ms_tools/convert_chr_names2.py test_converted.bed -f roman0 -t latin > test.bed
+		
+		/Users/schmidm/ms_tools/bedGraphToBigWig test.bed /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info ${f/.wig/_sacCer3.bw}
+	done
+	
+	
+rm test*
+rm *.wig
+
+
+
+mkdir bw
+mv *.bw bw/.
+
+cd bw
+ls
+#GSM617027_WT_NC_minus_sacCer3.bw        GSM617029_RCO1D_minus_sacCer3.bw        GSM617031_EAF3D_minus_sacCer3.bw        GSM617033_SET1D_minus_sacCer3.bw
+#GSM617027_WT_NC_plus_sacCer3.bw         GSM617029_RCO1D_plus_sacCer3.bw         GSM617031_EAF3D_plus_sacCer3.bw         GSM617033_SET1D_plus_sacCer3.bw
+#GSM617028_WT_mRNA_minus_sacCer3.bw      GSM617030_DST1D_minus_sacCer3.bw        GSM617032_SET2D_minus_sacCer3.bw
+#GSM617028_WT_mRNA_plus_sacCer3.bw       GSM617030_DST1D_plus_sacCer3.bw         GSM617032_SET2D_plus_sacCer3.bw
+```
+
 
 #### count
 ```{bash, eval = FALSE}
@@ -67,6 +127,70 @@ save(netseq_ucsc_means, file='data/NETseq_body_mean.RData')
 
 
 ## CRAC Milligan
+
+#### pre-processing
+```{bash, eval = FALSE}
+#!/usr/bin/env bash
+
+# downloaded gff files from GEO GSM1706520 and GSM1706521
+# info is a bit limiting but seems to be de-duplicated etc but not corrected for mutations
+# positions relative sacCer3
+
+head GSM1706520_Rpo21_nabFT.gff
+#    # novoalign (2.07.00MT - Aug  5 2010 @ 18:45:42) - A short read aligner with qualities.
+#    # (C) 2008 NovoCraft
+#    # Licensed for evaluation, educational, and not-for-profit use only.
+#    #  novoalign -c 55 -f All_Rpo21_nabFT.fasta -r Random -d /home/bifx-rta/s0898477/Project_004_CLAMP/References/Saccharomyces_cerevisiae.EF4.68.novoindex -s 1
+#    # Interpreting input files as FASTA.
+#    # Index Build Version: 2.7
+#    # Hash length: 11
+#    # Step size: 1
+#    chrIV   novo2gff        novo    1305623 1305661 .       +       .       >28_12706##GCC
+#    chrVIII novo2gff        novo    133073  133111  .       -       .       >23_15410##GCC
+
+
+# gff is 1-based half-open, simply convert to bedgraph needs to subtract -1 from start
+
+genome_info="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_genome_latin.info"
+
+cat GSM1706520_Rpo21_nabFT.gff | \
+grep -v ^# | \
+awk '{if($7=="+"){print $1"\t"$4-1"\t"$5"\t1"}}' | \
+sort -k1,1 -k2,2n | \
+bedtools genomecov -bg -i stdin -g ${genome_info} > GSM1706520_Rpo21_nabFT_plus.bed
+
+cat GSM1706520_Rpo21_nabFT.gff | \
+grep -v ^# | \
+awk '{if($7=="-"){print $1"\t"$4-1"\t"$5"\t1"}}' | \
+sort -k1,1 -k2,2n | \
+bedtools genomecov -bg -i stdin -g ${genome_info} > GSM1706520_Rpo21_nabFT_minus.bed
+
+cat GSM1706521_Rpo21-2_nabFT.gff | \
+grep -v ^# | \
+awk '{if($7=="+"){print $1"\t"$4-1"\t"$5"\t1"}}' | \
+sort -k1,1 -k2,2n | \
+bedtools genomecov -bg -i stdin -g ${genome_info} > GSM1706521_Rpo21-2_nabFT_plus.bed
+
+cat GSM1706521_Rpo21-2_nabFT.gff | \
+grep -v ^# | \
+awk '{if($7=="-"){print $1"\t"$4-1"\t"$5"\t1"}}' | \
+sort -k1,1 -k2,2n | \
+bedtools genomecov -bg -i stdin -g ${genome_info} > GSM1706521_Rpo21-2_nabFT_minus.bed
+
+
+
+### convert to bigwigs
+mkdir bw
+
+/Users/schmidm/ms_tools/bedGraphToBigWig GSM1706520_Rpo21_nabFT_plus.bed ${genome_info} bw/GSM1706520_Rpo21_nabFT_plus.bw
+
+/Users/schmidm/ms_tools/bedGraphToBigWig GSM1706520_Rpo21_nabFT_minus.bed ${genome_info} bw/GSM1706520_Rpo21_nabFT_minus.bw
+
+/Users/schmidm/ms_tools/bedGraphToBigWig GSM1706521_Rpo21-2_nabFT_plus.bed ${genome_info} bw/GSM1706521_Rpo21-2_nabFT_plus.bw
+
+/Users/schmidm/ms_tools/bedGraphToBigWig GSM1706521_Rpo21-2_nabFT_minus.bed ${genome_info} bw/GSM1706521_Rpo21-2_nabFT_minus.bw
+```
+
 
 #### count
 ```{bash, eval = FALSE}

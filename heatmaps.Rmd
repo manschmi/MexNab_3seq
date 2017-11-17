@@ -1,0 +1,314 @@
+---
+title: 'Heatmaps'
+author: "Manfred Schmid"
+output: html_document
+---
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+## Length-scaled mRNAs
+```{bash, eval = FALSE}
+ORFTs="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
+
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
+
+##rapa 0 rep 1 samples
+plus_bw="*_0_1*_plus*.bw"
+minus_bw=${plus_bw/plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+### xORF-T introns scale-region pm 1k
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh scale-regions \
+$ORFTs "$plus_bw" "$minus_bw" \
+1000 1000 TES deeptools_out/ORFT/ORFT_0_1_scaledm1p1k "--regionBodyLength=2000 --binSize=50 --missingDataAsZero"
+
+#log2 counts
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined.gz
+
+plotHeatmap -m deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2.gz \
+      --sortUsing mean --sortUsingSamples 10 \
+      --colorMap Blues --missingDataColor white \
+      --refPointLabel TSS \
+      --samplesLabel $sample_names \
+      --outFileSortedRegions deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_sortedBy_pAminus.bed \
+      -out deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_heatmap.pdf
+```
+
+## Length-scaled tandem vs divergent mRNAs
+
+#### make divergent and tandem mRNAs anno
+
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3
+
+######  ensure sorted by position ######
+sort -k1,1 -k2,2n Steinmetz_sacCer3_latin_ORFTs.bed -o Steinmetz_sacCer3_latin_ORFTs.bed
+
+## initial look
+head Steinmetz_sacCer3_latin_ORFTs.bed
+#chrI    7275    9260    ST3635:ORF-T:YAL067C:SEO1       0       -
+#chrI    31151   32984   ST0003:ORF-T:YAL062W:GDH3       0       +
+#chrI    33359   34896   ST0004:ORF-T:YAL061W:BDH2       0       +
+#chrI    35095   36392   ST0005:ORF-T:YAL060W:BDH1       0       +
+#chrI    36543   37328   ST0006:ORF-T:YAL059W:ECM1       0       +
+#chrI    37407   39032   ST0007:ORF-T:YAL058W:CNE1       0       +
+#chrI    39215   41968   ST0008:ORF-T:YAL056W:GPB2       0       +
+#chrI    42159   42832   ST0009:ORF-T:YAL055W:PEX22      0       +
+#chrI    42739   43548   ST3643:ORF-T:YAL054C:ACS1       0       -
+#chrI    43547   45068   ST3644:ORF-T:YAL054C:ACS1       0       -
+
+
+
+### divergent ORF pairs:
+#### 2 ORFTs appearing after each other where the first is on the minus strand and the next on plus
+#### with distance less than 500bp
+#### output is a bed file that contains both ORFTs as they were in the original bed file
+sort -k1,1 -k2,2n Steinmetz_sacCer3_latin.bed | \
+awk '{
+  if($4 ~ /ORF/ && 
+       last_anno[2] == "ORF-T" && 
+       $6=="+" && 
+       last_strand=="-" && 
+       last_end < $2 && 
+       last_end >= ($2-500)){
+     print last_gene; 
+     print $0};
+  last_end=$3; last_gene=$0; last_strand=$6; split($4,last_anno,":")
+  }' > Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed
+  
+wc -l Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed
+#    1430 Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed
+
+head Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed
+#chrI    56921   57418   ST3648:ORF-T:YAL046C:YAL046C    0       -
+#chrI    57501   57958   ST0013:ORF-T:YAL044W-A:YAL044W-A        0       +
+#chrI    58609   61090   ST3650:ORF-T:YAL043C:PTA1       0       -
+#chrI    61277   62646   ST0014:ORF-T:YAL042W:ERV46      0       +
+#chrI    74873   76210   ST3654:ORF-T:YAL036C:RBG1       0       -
+#chrI    76381   79534   ST0019:ORF-T:YAL035W:FUN12      0       +
+#chrI    80601   82586   ST3655:ORF-T:YAL034C:FUN19      0       -
+#chrI    82693   83310   ST0021:ORF-T:YAL033W:POP5       0       +
+#chrI    84737   87074   ST3657:ORF-T:YAL031C:GIP4       0       -
+#chrI    87261   87782   ST0022:ORF-T:YAL030W:SNC1       0       +
+
+
+
+### tandem ORF pairs:
+
+#### 2 ORFTs appearing after each other where both are on the same strand
+#### with distance between TES of upstream and TSS downstream less than 500bp
+#### output is a bed file that contains both ORFTs as they were in the original bed file
+
+sort -k1,1 -k2,2n Steinmetz_sacCer3_latin.bed | \
+awk '{if($4 ~ /ORF/ && 
+           last_anno[2] == "ORF-T" && 
+           last_end < $2 && 
+           last_end >= ($2-500) && 
+           $6==last_strand){
+         print last_gene; 
+         print $0
+    };
+    last_end=$3; last_gene=$0; last_strand=$6; split($4,last_anno,":")}' > \
+Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed
+
+wc -l Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed
+#    2474 Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed
+
+head Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed
+#chrI    36543   37328   ST0006:ORF-T:YAL059W:ECM1       0       +
+#chrI    37407   39032   ST0007:ORF-T:YAL058W:CNE1       0       +
+#chrI    37407   39032   ST0007:ORF-T:YAL058W:CNE1       0       +
+#chrI    39215   41968   ST0008:ORF-T:YAL056W:GPB2       0       +
+#chrI    39215   41968   ST0008:ORF-T:YAL056W:GPB2       0       +
+#chrI    42159   42832   ST0009:ORF-T:YAL055W:PEX22      0       +
+#chrI    45759   48304   ST0011:ORF-T:YAL053W:FLC2       0       +
+#chrI    48511   51798   ST0012:ORF-T:YAL051W:OAF1       0       +
+#chrI    52657   54842   ST3646:ORF-T:YAL048C:GEM1       0       -
+#chrI    54953   56922   ST3647:ORF-T:YAL047C:SPC72      0       -
+```
+
+
+#### deeptools divergent
+
+simply filter out the divergent genes from the matrix from above
+```{bash, eval = FALSE}
+div_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed"
+
+python ~/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py \
+deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2.gz \
+$div_bed -o deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_divergent.gz
+
+plotHeatmap -m deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_divergent.gz \
+      --sortUsing sum --sortUsingSample 1 \
+      --zMin -8 --zMax 2 --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_divergent_heatmap.pdf
+
+```
+
+#### deeptools tandem
+
+simply filter out the tandem genes from the matrix from above
+```{bash, eval = FALSE}
+tandem_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed"
+
+python ~/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py \
+deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2.gz \
+$tandem_bed -o deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_tandem.gz
+
+plotHeatmap -m deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_tandem.gz \
+      --sortUsing sum --sortUsingSample 1 \
+      --zMin -8 --zMax 2 --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/ORFT/ORFT_0_1_scaledm1p1k_joined_log2_tandem_heatmap.pdf
+
+```
+
+
+## Steinmetz plus XUTs TSS minus 2k plus 10k
+
+```{bash, eval = FALSE}
+Steinmetz="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed"
+XUTs="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs.bed"
+
+cat $XUTs | sort -k4,4 | awk '{OFS="\t"}{anno=$4;sub(".*:","",anno);$4="ST"NR+7272":"$4":"anno;print $0}' | \
+cat $Steinmetz - | awk '{OFS="\t"}{$5=$4;sub("^.......","",$5);sub(":.*$","",$5);print $0"\t"$3-$2}' | \
+awk '$5 != "other"' | sort -k5,5 -k7,7n | cut -f 1-6 | grep -v ^chrmt | grep -v 2-micron > tmp
+
+#ensure proper order for output
+anno="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_ORF_SUT_CUT_WeryXUTs_latin.bed"
+
+awk '$4 ~ /:ORF-T:/' tmp > $anno
+awk '$4 ~ /:XUT:/' tmp >> $anno
+awk '$4 ~ /:SUTs:/' tmp >> $anno
+awk '$4 ~ /:CUTs:/' tmp >> $anno
+rm tmp
+
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
+
+##rapa 0 rep 1 samples
+plus_bw="*Mex*_0_1_plus*.bw"
+minus_bw=${plus_bw/plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/norm_//g | sed s/_BGsub//g | sed s/_Mex67AA//g | sed s/_0_1//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+### xORF-T TSS m2p10k
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
+$anno "$plus_bw" "$minus_bw" \
+2000 10000 TSS deeptools_out/all_grouped/Mex_0_1_TSSm2p10k "--binSize=50 --missingDataAsZero"
+
+#log2
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/all_grouped/Mex_0_1_TSSm2p10k_joined.gz
+
+#group by type
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py deeptools_out/all_grouped/Mex_0_1_TSSm2p10k_joined_log2.gz $anno --groupByColumn 5
+
+plotHeatmap -m deeptools_out/all_grouped/Mex_0_1_TSSm2p10k_joined_log2_bedsorted.gz \
+      --sortUsing region_length --colorMap Blues --missingDataColor white --zMax -1 \
+      --samplesLabel $sample_names \
+      -out deeptools_out/all_grouped/Mex_0_1_TSSm2p10k_joined_log2_bedsorted_heatmap.pdf
+```
+
+
+## Tollervey CRAC heatmaps
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/
+
+plus_bw="bw/*_plus.bw"
+minus_bw="bw/*_minus.bw"
+
+sample_names=$(echo $plus_bw | sed s/_nabFT_plus.bw//g | sed s/GSM1706520_//g | sed s/GSM1706521_//g | sed s/bw\\///g)
+
+mkdir deeptools_out
+
+
+
+### all at once
+anno="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_ORF_SUT_CUT_WeryXUTs_latin.bed"
+
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
+$anno "$plus_bw" "$minus_bw" \
+2000 10000 TSS deeptools_out/CRAC_allgrouped_TSSm2p10k "--binSize=50 --missingDataAsZero"
+
+#log2
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/CRAC_allgrouped_TSSm2p10k_joined.gz
+
+#group by type
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py deeptools_out/CRAC_allgrouped_TSSm2p10k_joined_log2.gz $anno --groupByColumn 5
+
+plotHeatmap -m deeptools_out/CRAC_allgrouped_TSSm2p10k_joined_log2_bedsorted.gz \
+      --sortUsing region_length --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/CRAC_allgrouped_TSSm2p10k_joined_log2_bedsorted_heatmap.pdf
+```
+
+
+## heatmaps NETseq
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq
+
+plus_bw="bw/GSM617027_WT_NC_plus_sacCer3.bw bw/GSM617030_DST1D_plus_sacCer3.bw "
+minus_bw=${plus_bw//plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/_plus_sacCer3.bw//g | sed s/bw\\///g)
+
+mkdir deeptools_out
+
+
+### all at once
+anno="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_ORF_SUT_CUT_WeryXUTs_latin.bed"
+
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
+$anno "$plus_bw" "$minus_bw" \
+2000 10000 TSS deeptools_out/NETseq_allgrouped_TSSm2p10k "--binSize=50 --missingDataAsZero"
+
+#log2
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/NETseq_allgrouped_TSSm2p10k_joined.gz
+
+#group by type
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py deeptools_out/NETseq_allgrouped_TSSm2p10k_joined_log2.gz $anno --groupByColumn 5
+
+plotHeatmap -m deeptools_out/NETseq_allgrouped_TSSm2p10k_joined_log2_bedsorted.gz \
+      --sortUsing region_length --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/NETseq_allgrouped_TSSm2p10k_joined_log2_bedsorted_heatmap.pdf
+```
+
+
+
+## ChIPseq heatmaps
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+
+bw="GSM2551210_WT_A_140.bw"
+
+sample_names=$(echo $bw | sed s/_A_140.bw//g)
+
+mkdir deeptools_out
+
+
+### all at once
+anno="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_ORF_SUT_CUT_WeryXUTs_latin.bed"
+
+computeMatrix reference-point -R $anno -S $bw \
+-b 2000 -a 10000 --referencePoint TSS \
+-out deeptools_out/ChIPseq_allgrouped_TSSm2p10k.gz \
+--binSize 50 --missingDataAsZero
+
+#log2
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/ChIPseq_allgrouped_TSSm2p10k.gz
+
+#group by type
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py deeptools_out/ChIPseq_allgrouped_TSSm2p10k_log2.gz $anno --groupByColumn 5
+
+plotHeatmap -m deeptools_out/ChIPseq_allgrouped_TSSm2p10k_log2_bedsorted.gz \
+      --sortUsing region_length --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/ChIPseq_allgrouped_TSSm2p10k_log2_bedsorted_heatmap.pdf
+```
+
+```{r}
+sessionInfo()
+```

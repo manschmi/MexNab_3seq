@@ -1,0 +1,140 @@
+---
+title: 'snRNA'
+author: "Manfred Schmid"
+output: html_document
+---
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r, echo=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_snRNA/'), 
+                      dev='pdf', echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(knitr))
+suppressWarnings(library(RMetaTools))
+suppressWarnings(library(broom))
+```
+
+
+## heatmaps
+
+```{bash, eval = FALSE}
+### snRNA TES ###
+sgdSNR="/Users/schmidm//Documents/genomewide_datasets/annotations/sacCer3/sgdSNRs_sacCer3.bed"
+
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
+
+##rapa 0 rep 1 samples
+plus_bw="*_0_1*_plus*.bw"
+minus_bw=${plus_bw/plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+## matrix
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
+$sgdSNR "$plus_bw" "$minus_bw" \
+1000 1000 TES deeptools_out/SNR/snRNA_0_1_TESpm1k "--binSize=10 --missingDataAsZero"
+
+#log2 instead of counts
+python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/SNR/snRNA_0_1_TESpm1k_joined.gz
+
+plotHeatmap -m deeptools_out/SNR/snRNA_0_1_TESpm1k_joined_log2.gz \
+      --sortUsing sum --colorMap Blues --missingDataColor white \
+      --refPointLabel TES \
+      --samplesLabel $sample_names \
+      -out deeptools_out/SNR/snRNA_0_1_TESpm1k_joined_log2_heatmap.pdf
+
+```
+
+
+## single nucleotide metagene analysis
+
+```{bash, eval = FALSE}
+sgdSNR="/Users/schmidm//Documents/genomewide_datasets/annotations/sacCer3/sgdSNRs_sacCer3.bed"
+
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
+
+##rapa 0 rep 1 samples
+plus_bw="*_0_1*_plus*.bw"
+minus_bw=${plus_bw/plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+## matrix
+bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
+$sgdSNR "$plus_bw" "$minus_bw" \
+10 10 TES deeptools_out/SNR/snRNA_0_1_TESpm10bp_single_nucres "--binSize=1 --missingDataAsZero"
+```
+
+
+#### single nucl to R
+```{r}
+snrna <- RMetaTools::load_deeptoolsmatrix('~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/SNR/snRNA_0_1_TESpm10bp_single_nucres_joined.gz')
+
+snrna
+```
+
+add pseudount for IPs and pAminus at or below background
+```{r}
+(pseudocount <- min(snrna$value[snrna$value>0]))
+```
+
+```{r}
+(snrna %<>%
+  mutate(value = ifelse(value <= 0, pseudocount, value+pseudocount),
+          rel_pos = rel_pos + 1,
+         sample_name = sub('norm_', '', sample_name) %>% 
+            sub('_BGsub', '', .) %>% 
+            sub('_KevinRoyAfiltered', '', .)) %>%
+   separate(sample_name, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_') %>%
+   mutate(pA = case_when(.$Pap == 'noPap' ~ 'pA+', 
+                         .$Pap == 'xPap' ~ 'pA+/-',
+                         .$Pap == 'xPappAminus' ~ 'pA-'),
+          pA = factor(pA, levels=c('pA+', 'pA+/-', 'pA-'))))
+```
+
+
+#### metagene values
+```{r}
+(snrna_meta <- snrna %>%
+  group_by(rel_pos, pA, strain, fraction, rapa, rep) %>%
+  do(tidy(summary(.$value))))
+```
+
+
+#### plots
+```{r snRNA single nuc mean and median line }
+snrna_meta %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=rel_pos, y=mean)) + 
+  geom_line() +
+  geom_line(aes(y=median), color='red') +
+  scale_y_log10() +
+  facet_grid(strain~pA+fraction+rapa+rep, scales='free') +
+  theme_bw()
+```
+
+
+```{r snRNA single nuc mean and median line and points}
+snrna %>%
+  filter(rapa == '0') %>%
+ggplot(., aes(x=rel_pos, y=value)) + 
+  geom_point(size=.5) +
+  geom_line(data=snrna_meta, aes(x=rel_pos, y=mean)) +
+  geom_line(data=snrna_meta, aes(x=rel_pos, y=median), color='red') +
+  scale_y_log10() +
+  facet_grid(strain~pA+fraction+rapa+rep, scales='free') +
+  theme_bw()
+```
+
+
+```{r}
+sessionInfo()
+```

@@ -16,7 +16,8 @@ Next step is to mask genomic pA reads from the genome. This could possible be in
 1)	all regions with >= 4A within 6 nucleotides but no C or Ts (downstream of position).  
 2)	all regions with >= 12A within 18 nucleotides (no CT restrictions, downstream of position).  
 3)	All regions with >=15A within 18 nucleotides (upstream of position).  
-I would say number 3 is optional, and the technical reason for this filtering is obscure. Apparently Lexogen produces artifact reads contain polyT stretches, and these will map to A-rich sequences in the genome, which can be filtered away using criterion 3. On our first run this was not obvious and I did not include that.
+I would say number 3 is optional, and the technical reason for this filtering is somewhat obscure. Apparently QuantSeq protocol can produce artifact reads containing polyT stretches, and these will map to A-rich sequences in the genome, which can be filtered away using criterion 3. On our first run this was not obvious and I did not include that.
+
 
 ## creation of the genomic A-mask bed file
 
@@ -191,17 +192,83 @@ cat /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_Sp_merged_flagg
 /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_Sp_merged_flagged_A4in6_minus_merged.bed | \
 sort -k1,1 -k2,2n | \
 bedtools merge -i stdin > /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_minus.bed
+
+
+## single file
+awk '{if(NR == FNR){strand="+"}else{strand="-"};print $0"\t.\t0\t"strand}' /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus.bed /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_minus.bed | sort -k1,1 -k2,2n > /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy.bed
+
+##single mask S.cerevisiae only
+grep ^chr /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy.bed > /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/genomicAmask.bed
+
+## count positions
+awk '{sum+=($3-$2)}END{print sum}' /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/genomicAmask.bed
+# 655732
+
+## genome size
+head /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes
+#chrM	85779
+#chrI	230218
+#chrII	813184
+#chrIII	316620
+#chrIV	1531933
+#chrIX	439888
+#chrV	576874
+
+awk '{sum+=$2}END{print sum*2}' /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes
+# 24314210 (total nt in both strands!!)
+
+
+## 655732/24314210 = 0.02696909 --> 2.7% of genome are masked
 ```
 
 
 
 ## filtering genomic A-masked positions from bedgraphs
 
+#### 10min data
+
 ```{bash, eval=FALSE}
 #!usr/bin/bash
 
+##subtract from bedgraph; only do S.cerevisiae for this part for simplicity
+grep ^chr /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus.bed | \
+ sort -k1,1 -k2,2n > /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_Sc_plus.bed
 
-##for flagging of genomic A positions see remove_genomic_As.sh in Results/Lexogen
+grep ^chr /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_minus.bed |  sort -k1,1 -k2,2n > /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_Sc_minus.bed
+
+
+mkdir /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph
+
+for f in /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/raw_bedgraph/*_plus.bedgraph
+do
+  echo $f
+  grep ^chr $f | \
+  sort -k1,1 -k2,2n | \
+  bedtools subtract -a - \
+  -b /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_Sc_plus.bed > \
+  ${f/.bedgraph/_KevinRoyAfiltered.bedgraph}
+done
+
+for f in /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/raw_bedgraph/*_minus.bedgraph
+do
+  echo $f
+  grep ^chr $f | \
+  sort -k1,1 -k2,2n | \
+  bedtools subtract -a - \
+  -b /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_Sc_minus.bed > \
+  ${f/.bedgraph/_KevinRoyAfiltered.bedgraph}
+done
+
+mv /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/raw_bedgraph/*KevinRoyAfiltered.bedgraph \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph/.
+```
+
+
+
+#### 2min data
+
+```{bash, eval=FALSE}
+#!usr/bin/bash
 
 ##subtract from bedgraph; only do S.cerevisiae for this part for simplicity
 grep ^chr /Users/schmidm/Documents/Results/Lexogen_RNAseq/bams/sacCer3_flagged_KevinRoy_plus.bed | \
@@ -232,12 +299,155 @@ do
   ${f/.bedgraph/_KevinRoyAfiltered.bedgraph}
 done
 
-mv /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/raw_bedgraph/*KevinRoyAfiltered.bedgraph \
-/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph/.
+mv /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/raw_bedgraph/*KevinRoyAfiltered.bedgraph \
+/Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph/.
 ```
 
 
-#### stats for reads in S. cerevisiae and S.pombe and A-filtered...
+## stats for reads in S. cerevisiae and S.pombe and A-filtered...
+
+#### 10min data
+
+```{bash, eval = FALSE}
+### amount of reads in S.cerevisiae and S.pombe raw files
+raw_count_file="/Users/schmidm/Documents/Results/Lexogen_RNAseq/trim_and_map_info/Sc_Sp_raw_bedgraph.counts"
+
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/raw_bedgraph
+
+echo "bedgraph Sc Sp" > ${raw_count_file}
+
+for b in *_plus.bedgraph
+do
+  echo "counting ${b}"
+
+  cat $b ${b/_plus.bedgraph/_minus.bedgraph} | \
+  awk -v fname="${b/_plus.bedgraph/}" '{if($1 ~ /^chr/){Sc_sum+=$4*($3-$2)}else{Sp_sum+=$4*($3-$2)}}END{print fname" "Sc_sum" "Sp_sum}' >> ${raw_count_file}
+
+done
+
+
+cat $raw_count_file
+#bedgraph Sc Sp
+#Mex_in_0_1 5942399 137163
+#Mex_in_0_2 4707318 112692
+#Mex_in_0_3 10113976 235737
+#Mex_in_15_1 5541109 176583
+#Mex_in_15_2 4402660 81556
+#Mex_in_15_3 8171197 273885
+#Mex_in_70_1 4302130 132222
+#Mex_in_70_2 4006037 111759
+#Mex_in_70_3 3993881 135561
+#Mex_in_neg 5261497 72637
+#Mex_ip_0_1 7150452 165124
+#Mex_ip_0_2 7054968 196736
+#Mex_ip_0_3 5173699 138931
+#Mex_ip_15_1 4930616 508465
+#Mex_ip_15_2 4323077 256616
+#Mex_ip_15_3 3742082 431698
+#Mex_ip_70_1 6366109 558609
+#Mex_ip_70_2 3934838 344116
+#Mex_ip_70_3 4029790 419957
+#Mex_ip_neg 5603811 851599
+#Nab_in_0_1 5396295 106881
+#Nab_in_0_2 5482125 147565
+#Nab_in_0_3 6450346 184617
+#Nab_in_15_1 2357069 71017
+#Nab_in_15_2 5483223 133231
+#Nab_in_15_3 6574692 197926
+#Nab_in_70_1 2997165 84911
+#Nab_in_70_2 4714484 194848
+#Nab_in_70_3 5565636 240363
+#Nab_in_neg 4077028 109698
+#Nab_ip_0_1 5876655 192255
+#Nab_ip_0_2 4597870 193963
+#Nab_ip_0_3 5694365 284033
+#Nab_ip_15_1 3924799 390638
+#Nab_ip_15_2 3665898 260786
+#Nab_ip_15_3 4191233 411475
+#Nab_ip_70_1 3248139 288464
+#Nab_ip_70_2 4751696 602516
+#Nab_ip_70_3 3904713 407398
+#Nab_ip_neg 5521766 1494515
+#noPap_in_0 1778588 34996
+#noPap_in_70 1994363 48467
+#noPap_ip_0 3086874 230384
+#noPap_ip_70 2698267 262979
+#xPap_in_0 5704295 59633
+#xPap_in_70 6447377 65637
+#xPap_ip_0 6075478 236730
+#xPap_ip_70 7340559 276256
+
+
+### counts after A-filtering
+filt_count_file="/Users/schmidm/Documents/Results/Lexogen_RNAseq/trim_and_map_info/Sc_Afiltered_bedgraph.counts"
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph
+
+echo "bedgraph Sc Sp" > ${filt_count_file}
+
+for b in *_plus_KevinRoyAfiltered.bedgraph
+do
+  echo "counting ${b}"
+
+  cat $b ${b/_plus/_minus} | \
+  awk -v fname="${b/_plus_KevinRoyAfiltered.bedgraph/}" '{sum+=$4*($3-$2)}END{print fname" "sum}' >> ${filt_count_file}
+
+done
+
+cat $filt_count_file
+#bedgraph Sc Sp
+#Mex_in_0_1 5210550
+#Mex_in_0_2 4141477
+#Mex_in_0_3 9052288
+#Mex_in_15_1 4851797
+#Mex_in_15_2 3843771
+#Mex_in_15_3 7285130
+#Mex_in_70_1 3642981
+#Mex_in_70_2 3439136
+#Mex_in_70_3 3501942
+#Mex_in_neg 4687659
+#Mex_ip_0_1 6143287
+#Mex_ip_0_2 6060297
+#Mex_ip_0_3 4553450
+#Mex_ip_15_1 3982991
+#Mex_ip_15_2 3535866
+#Mex_ip_15_3 3114382
+#Mex_ip_70_1 4668975
+#Mex_ip_70_2 3159292
+#Mex_ip_70_3 3187034
+#Mex_ip_neg 4910928
+#Nab_in_0_1 4763184
+#Nab_in_0_2 4779771
+#Nab_in_0_3 5636310
+#Nab_in_15_1 2076661
+#Nab_in_15_2 4762969
+#Nab_in_15_3 5763307
+#Nab_in_70_1 2617732
+#Nab_in_70_2 4112311
+#Nab_in_70_3 4918285
+#Nab_in_neg 3607338
+#Nab_ip_0_1 5137191
+#Nab_ip_0_2 3982006
+#Nab_ip_0_3 4916991
+#Nab_ip_15_1 3346347
+#Nab_ip_15_2 3105436
+#Nab_ip_15_3 3565773
+#Nab_ip_70_1 2763834
+#Nab_ip_70_2 4014559
+#Nab_ip_70_3 3298796
+#Nab_ip_neg 4786756
+#noPap_in_0 1554131
+#noPap_in_70 1724969
+#noPap_ip_0 2600270
+#noPap_ip_70 2259523
+#xPap_in_0 5513515
+#xPap_in_70 6271098
+#xPap_ip_0 5815192
+#xPap_ip_70 6949865
+```
+
+
+#### 2min data
+
 ```{bash, eval = FALSE}
 ### amount of reads in S.cerevisiae and S.pombe raw files
 raw_count_file="/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/trim_and_map_info/Sc_Sp_raw_bedgraph.counts"
@@ -251,45 +461,45 @@ do
   echo "counting ${b}"
 
   cat $b ${b/_plus.bedgraph/_minus.bedgraph} | \
-  awk -v fname="${b}" '{if($1 ~ /^chr/){Sc_sum+=$4*($3-$2)}else{Sp_sum+=$4*($3-$2)}}END{print fname" "Sc_sum" "Sp_sum}' >> ${raw_count_file}
+  awk -v fname="${b/_plus.bedgraph/}" '{if($1 ~ /^chr/){Sc_sum+=$4*($3-$2)}else{Sp_sum+=$4*($3-$2)}}END{print fname" "Sc_sum" "Sp_sum}' >> ${raw_count_file}
 
 done
 
 
 cat $raw_count_file
 #bedgraph Sc Sp
-#noPap_Mex67AA_input_0_1_plus.bedgraph 2467734 41709
-#noPap_Mex67AA_input_15_1_plus.bedgraph 3352405 74880
-#noPap_Mex67AA_input_70_1_plus.bedgraph 2735663 68571
-#noPap_Mex67AA_ip_0_1_plus.bedgraph 2949235 456822
-#noPap_Mex67AA_ip_15_1_plus.bedgraph 2110422 519671
-#noPap_Mex67AA_ip_70_1_plus.bedgraph 1249021 399728
-#noPap_Mex67AA_ip_neg0_1_plus.bedgraph 3517377 795545
-#noPap_Nab2AA_input_0_1_plus.bedgraph 2595050 42095
-#noPap_Nab2AA_input_15_1_plus.bedgraph 3634113 74302
-#noPap_Nab2AA_ip_0_1_plus.bedgraph 2015728 377298
-#noPap_Nab2AA_ip_15_1_plus.bedgraph 2195539 591965
-#xPap_Mex67AA_input_0_1_plus.bedgraph 3781260 35565
-#xPap_Mex67AA_input_15_1_plus.bedgraph 5519178 59857
-#xPap_Mex67AA_input_70_1_plus.bedgraph 3935436 41347
-#xPap_Mex67AA_ip_0_1_plus.bedgraph 2855569 151361
-#xPap_Mex67AA_ip_0_2_plus.bedgraph 3156133 175134
-#xPap_Mex67AA_ip_0_3_plus.bedgraph 2459241 132147
-#xPap_Mex67AA_ip_15_1_plus.bedgraph 3044177 174875
-#xPap_Mex67AA_ip_15_2_plus.bedgraph 3668144 213321
-#xPap_Mex67AA_ip_15_3_plus.bedgraph 2260905 140711
-#xPap_Mex67AA_ip_70_1_plus.bedgraph 4690852 379459
-#xPap_Mex67AA_ip_70_2_plus.bedgraph 3143608 267832
-#xPap_Mex67AA_ip_70_3_plus.bedgraph 3029220 247148
-#xPap_Mex67AA_ip_neg0_1_plus.bedgraph 3579615 435360
-#xPap_Nab2AA_input_0_1_plus.bedgraph 3944905 40380
-#xPap_Nab2AA_input_15_1_plus.bedgraph 3626890 35202
-#xPap_Nab2AA_ip_0_1_plus.bedgraph 2057164 434311
-#xPap_Nab2AA_ip_0_2_plus.bedgraph 3040507 192401
-#xPap_Nab2AA_ip_0_3_plus.bedgraph 2446311 163220
-#xPap_Nab2AA_ip_15_1_plus.bedgraph 2196866 138905
-#xPap_Nab2AA_ip_15_2_plus.bedgraph 2547243 160215
-#xPap_Nab2AA_ip_15_3_plus.bedgraph 2104394 144518
+#noPap_Mex67AA_input_0_1 2467734 41709
+#noPap_Mex67AA_input_15_1 3352405 74880
+#noPap_Mex67AA_input_70_1 2735663 68571
+#noPap_Mex67AA_ip_0_1 2949235 456822
+#noPap_Mex67AA_ip_15_1 2110422 519671
+#noPap_Mex67AA_ip_70_1 1249021 399728
+#noPap_Mex67AA_ip_neg0_1 3517377 795545
+#noPap_Nab2AA_input_0_1 2595050 42095
+#noPap_Nab2AA_input_15_1 3634113 74302
+#noPap_Nab2AA_ip_0_1 2015728 377298
+#noPap_Nab2AA_ip_15_1 2195539 591965
+#xPap_Mex67AA_input_0_1 3781260 35565
+#xPap_Mex67AA_input_15_1 5519178 59857
+#xPap_Mex67AA_input_70_1 3935436 41347
+#xPap_Mex67AA_ip_0_1 2855569 151361
+#xPap_Mex67AA_ip_0_2 3156133 175134
+#xPap_Mex67AA_ip_0_3 2459241 132147
+#xPap_Mex67AA_ip_15_1 3044177 174875
+#xPap_Mex67AA_ip_15_2 3668144 213321
+#xPap_Mex67AA_ip_15_3 2260905 140711
+#xPap_Mex67AA_ip_70_1 4690852 379459
+#xPap_Mex67AA_ip_70_2 3143608 267832
+#xPap_Mex67AA_ip_70_3 3029220 247148
+#xPap_Mex67AA_ip_neg0_1 3579615 435360
+#xPap_Nab2AA_input_0_1 3944905 40380
+#xPap_Nab2AA_input_15_1 3626890 35202
+#xPap_Nab2AA_ip_0_1 2057164 434311
+#xPap_Nab2AA_ip_0_2 3040507 192401
+#xPap_Nab2AA_ip_0_3 2446311 163220
+#xPap_Nab2AA_ip_15_1 2196866 138905
+#xPap_Nab2AA_ip_15_2 2547243 160215
+#xPap_Nab2AA_ip_15_3 2104394 144518
 
 
 ### counts after A-filtering
@@ -303,42 +513,42 @@ do
   echo "counting ${b}"
 
   cat $b ${b/_plus/_minus} | \
-  awk -v fname="${b}" '{sum+=$4*($3-$2)}END{print fname" "sum}' >> ${filt_count_file}
+  awk -v fname="${b/_plus_KevinRoyAfiltered.bedgraph/}" '{sum+=$4*($3-$2)}END{print fname" "sum}' >> ${filt_count_file}
 
 done
 
 cat $filt_count_file
-bedgraph Sc Sp
-noPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph 2202503
-noPap_Mex67AA_input_15_1_plus_KevinRoyAfiltered.bedgraph 2963985
-noPap_Mex67AA_input_70_1_plus_KevinRoyAfiltered.bedgraph 2387948
-noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph 2579454
-noPap_Mex67AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph 1837564
-noPap_Mex67AA_ip_70_1_plus_KevinRoyAfiltered.bedgraph 1054532
-noPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph 3116325
-noPap_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bedgraph 2313940
-noPap_Nab2AA_input_15_1_plus_KevinRoyAfiltered.bedgraph 3235115
-noPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph 1769572
-noPap_Nab2AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph 1905171
-xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bedgraph 3654903
-xPap_Mex67AA_input_15_1_plus_KevinRoyAfiltered.bedgraph 5390170
-xPap_Mex67AA_input_70_1_plus_KevinRoyAfiltered.bedgraph 3825320
-xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph 2648241
-xPap_Mex67AA_ip_0_2_plus_KevinRoyAfiltered.bedgraph 3022976
-xPap_Mex67AA_ip_0_3_plus_KevinRoyAfiltered.bedgraph 2310471
-xPap_Mex67AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph 2904716
-xPap_Mex67AA_ip_15_2_plus_KevinRoyAfiltered.bedgraph 3379732
-xPap_Mex67AA_ip_15_3_plus_KevinRoyAfiltered.bedgraph 2072147
-xPap_Mex67AA_ip_70_1_plus_KevinRoyAfiltered.bedgraph 4265182
-xPap_Mex67AA_ip_70_2_plus_KevinRoyAfiltered.bedgraph 2950139
-xPap_Mex67AA_ip_70_3_plus_KevinRoyAfiltered.bedgraph 2784526
-xPap_Mex67AA_ip_neg0_1_plus_KevinRoyAfiltered.bedgraph 3153307
-xPap_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bedgraph 3822077
-xPap_Nab2AA_input_15_1_plus_KevinRoyAfiltered.bedgraph 3530828
-xPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered.bedgraph 1888025
-xPap_Nab2AA_ip_0_2_plus_KevinRoyAfiltered.bedgraph 2815418
-xPap_Nab2AA_ip_0_3_plus_KevinRoyAfiltered.bedgraph 2214857
-xPap_Nab2AA_ip_15_1_plus_KevinRoyAfiltered.bedgraph 1901498
-xPap_Nab2AA_ip_15_2_plus_KevinRoyAfiltered.bedgraph 2208254
-xPap_Nab2AA_ip_15_3_plus_KevinRoyAfiltered.bedgraph 1902227
+#bedgraph Sc Sp
+#noPap_Mex67AA_input_0_1 2202503
+#noPap_Mex67AA_input_15_1 2963985
+#noPap_Mex67AA_input_70_1 2387948
+#noPap_Mex67AA_ip_0_1 2579454
+#noPap_Mex67AA_ip_15_1 1837564
+#noPap_Mex67AA_ip_70_1 1054532
+#noPap_Mex67AA_ip_neg0_1 3116325
+#noPap_Nab2AA_input_0_1 2313940
+#noPap_Nab2AA_input_15_1 3235115
+#noPap_Nab2AA_ip_0_1 1769572
+#noPap_Nab2AA_ip_15_1 1905171
+#xPap_Mex67AA_input_0_1 3654903
+#xPap_Mex67AA_input_15_1 5390170
+#xPap_Mex67AA_input_70_1 3825320
+#xPap_Mex67AA_ip_0_1 2648241
+#xPap_Mex67AA_ip_0_2 3022976
+#xPap_Mex67AA_ip_0_3 2310471
+#xPap_Mex67AA_ip_15_1 2904716
+#xPap_Mex67AA_ip_15_2 3379732
+#xPap_Mex67AA_ip_15_3 2072147
+#xPap_Mex67AA_ip_70_1 4265182
+#xPap_Mex67AA_ip_70_2 2950139
+#xPap_Mex67AA_ip_70_3 2784526
+#xPap_Mex67AA_ip_neg0_1 3153307
+#xPap_Nab2AA_input_0_1 3822077
+#xPap_Nab2AA_input_15_1 3530828
+#xPap_Nab2AA_ip_0_1 1888025
+#xPap_Nab2AA_ip_0_2 2815418
+#xPap_Nab2AA_ip_0_3 2214857
+#xPap_Nab2AA_ip_15_1 1901498
+#xPap_Nab2AA_ip_15_2 2208254
+#xPap_Nab2AA_ip_15_3 1902227
 ```

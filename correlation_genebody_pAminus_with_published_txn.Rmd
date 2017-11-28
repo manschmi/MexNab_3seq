@@ -1,0 +1,350 @@
+---
+title: "Correlation with published transcription studies"
+author: "Manfred Schmid"
+output: html_document
+---
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r global_options}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs_correlation_2min_with_published_txn/', dev='pdf',
+                      echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(knitr))
+suppressWarnings(library(broom))
+suppressWarnings(library(LSD))
+```
+
+
+### load the transcription estimates
+
+from Markdown *Published_txn_measures.Rmd*
+```{r}
+load(file='data/published_gene_body_txn_estimates.RData', verbose=TRUE)
+
+(txn_estimates %<>% separate(name, c('id', 'type', 'name', 'common_name'), sep=':'))
+```
+
+
+
+### load the 3' seq counts
+
+-> from script body_end_counting.Rmd  
+-> her we only look at length-normalized BGsub data
+```{r}
+load('data/norm_2min_body_end_scaled_and_BGsub.RData', verbose = TRUE)
+
+both_df
+```
+
+
+### combine and focus on 0 rapa samples
+
+--> remove all genes not above BG in our data
+```{r}
+(both_df %<>% 
+   filter(rapa == 0, scaled_reads > 0) %>% 
+   left_join(., txn_estimates))
+```
+
+
+
+## correlation matrices
+
+correlations are from log-scaled data for simplicity
+```{r}
+our_data <- both_df %>%
+  unite(sample, c(part,pA,strain,fraction,rapa,rep), sep='_') %>%
+  dplyr::select(id, type, sample, scaled_reads) 
+
+txn_data <- dplyr::select(txn_estimates, -name, -common_name, -size) %>%
+  gather(sample, scaled_reads, -id, -type)
+
+(log2_mat <- bind_rows(our_data, txn_data) %>%
+    mutate(scaled_reads = log2(scaled_reads)) %>%
+    spread(sample, scaled_reads))
+```
+
+
+#### Correlation matrix
+
+```{r}
+study_order <- colnames(log2_mat)[2:ncol(log2_mat)]
+
+study_order2 <- study_order[order(sub('Mex67', 'Nab2', study_order) %>%
+                                    sub('end_', 'aend', .) %>%
+                                    sub('CRAC', 'nCRAC', .) %>%
+                                    sub('Chip', 'oChIP', .))]
+```
+
+```{r}
+cor_df <- function(mat, ...) {
+  mat %>%
+  as.matrix(.) %>%
+  cor(., ...) %>%
+  as.data.frame() %>%
+  rownames_to_column(var='study1') %>%
+  gather(study2, cor, -study1) %>%
+  mutate(study1 = factor(study1, levels=study_order2),
+         study2 = factor(study2, levels=study_order2))
+}
+```
+
+```{r spearman correlation matrix all}
+log2_mat %>%
+  dplyr::select(-id, -type) %>%
+  cor_df(., method='spearman', use='pairwise.complete.obs') %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient2(low='red', mid='white', high='blue', limits=c(-1,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6)) 
+```
+
+
+```{r spearman correlation matrix ORFs Figure}
+log2_mat %>%
+  filter(type == 'ORF-T') %>%
+  dplyr::select(-id, -type, -contains('pA+ + pA-'),
+                -contains('body_pA+'), contains('mean'), -contains('pA-X'), -contains('end_pA-')) %>%
+  na.omit %>%
+  cor_df(., method='spearman', use='complete.obs') %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient2(low='red', mid='white', high='blue', limits=c(-1,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6)) +
+  geom_text(aes(label=round(cor,2)), size=2)
+```
+
+```{r spearman correlation matrix SUTs}
+log2_mat %>%
+  filter(type == 'SUTs') %>%
+  dplyr::select(-id, -type, -contains('pA+ + pA-'),
+                -contains('body_pA+'), contains('mean'), -contains('pA-X'), -contains('end_pA-')) %>%
+  na.omit %>%
+  cor_df(., method='spearman', use='complete.obs') %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient2(low='red', mid='white', high='blue', limits=c(-1,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6)) +
+  geom_text(aes(label=round(cor,2)), size=2)
+```
+
+```{r spearman correlation matrix CUTs}
+log2_mat %>%
+  filter(type == 'CUTs') %>%
+  dplyr::select(-id, -type, -contains('pA+ + pA-'),
+                -contains('body_pA+'), contains('mean'), -contains('pA-X'), -contains('end_pA-')) %>%
+  na.omit %>%
+  cor_df(., method='spearman', use='complete.obs') %>%
+  ggplot(.,aes(x=study1, y=study2, fill=cor)) + 
+  geom_tile() +
+  scale_fill_gradient2(low='red', mid='white', high='blue', limits=c(-1,1)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size = 6),
+        axis.text.y=element_text(size = 6)) +
+  geom_text(aes(label=round(cor,2)), size=2)
+```
+
+
+## correlation scatters
+
+```{r}
+both_df %<>%
+  group_by(part, pA, strain, fraction, rapa, rep)
+```
+
+
+#### main scatter plot fun
+```{r}
+heatscatter_plot <- function(df,
+                             y_col = 'Chipseq_mean',
+                             use_part = 'body', 
+                             use_pA = 'pA-', 
+                             use_strain = 'Mex67AA', 
+                             use_fraction = 'ip', 
+                             use_rapa = 0, 
+                             use_rep = 1,
+                             cor=T, 
+                             colpal = 'bl2gr2rd', 
+                             ...) {
+  sel_df <- df %>%
+  filter(part == use_part, pA == use_pA, strain == use_strain, fraction == use_fraction, rapa == use_rapa, rep == use_rep)
+
+heatscatter(log2(sel_df$scaled_reads), log2(unlist(sel_df[, y_col])), xlab=paste0(use_part, ' ',use_pA, ': ',use_strain, '_',use_fraction, '_',use_rapa, '_', use_rep), ylab = y_col,
+            cor=cor, colpal=colpal,...)
+
+xcenter <- median(log2(sel_df$scaled_reads))
+ycenter <- median(na.omit(log2(unlist(sel_df[, y_col]))))
+intercept <- ycenter - xcenter
+abline(a = intercept, b=1, lty=2)
+abline(a = intercept+2, b=1, lty=3)
+abline(a = intercept-2, b=1, lty=3)
+}
+```
+
+```{r heatscatters vs Milligan CRAC}
+heatscatter2x2 <- function(df, ycol = 'CRAC_mean', ...) {
+  par(mfrow=c(2,2))
+  heatscatter_plot(df, y_col = ycol, use_fraction = 'input', ...)
+
+  heatscatter_plot(df, y_col = ycol, use_fraction = 'ip', ...)
+
+  heatscatter_plot(df, y_col = ycol, use_part = 'end', use_pA = 'pA+', use_fraction = 'input', ...)
+
+  heatscatter_plot(df, y_col = ycol, use_part = 'end', use_pA = 'pA+', use_fraction = 'ip', ...)
+  par(mfrow=c(1,1))
+}
+```
+
+
+
+#### with Rpb3 ChIP^2
+
+Correlations
+```{r}
+both_df %>%
+  summarise(cor_pearson_xmean = cor(scaled_reads, Chip2_mean, method='pearson', use='pairwise.complete'),
+            cor_spearman_xmean = cor(scaled_reads, Chip2_mean, method='spearman', use='pairwise.complete')) %>%
+  kable
+```
+
+
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIP2 means pearson}
+heatscatter2x2(both_df, ycol = 'Chip2_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIP2 means spearman}
+heatscatter2x2(both_df, ycol = 'Chip2_mean', method='spearman')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIP2 means only ORFs spearman}
+filter(both_df, type == 'ORF-T') %>%
+heatscatter2x2(., ycol = 'Chip2_mean', method='spearman')
+```
+
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIP2 means only SUTs spearman}
+filter(both_df, type == 'SUTs') %>%
+heatscatter2x2(., ycol = 'Chip2_mean', method='spearman')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIP2 means only CUTs}
+filter(both_df, type == 'CUTs') %>%
+heatscatter2x2(., ycol = 'Chip2_mean', method='pearson')
+```
+
+
+#### with Rpb3 ChIPseq
+
+Correlations
+```{r}
+both_df %>%
+  summarise(cor_pearson_xmean = cor(scaled_reads, Chipseq_mean, method='pearson', use='pairwise.complete'),
+            cor_spearman_xmean = cor(scaled_reads, Chipseq_mean, method='spearman', use='pairwise.complete')) %>%
+  kable
+```
+
+
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIPseq means pearson}
+#heatscatter2x2(both_df, ycol = 'Chipseq_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIPseq means spearman}
+heatscatter2x2(both_df, ycol = 'Chipseq_mean', method='spearman')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIPseq means only ORFs}
+filter(both_df, type == 'ORF-T') %>%
+heatscatter2x2(., ycol = 'Chipseq_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIPseq means only SUTs}
+filter(both_df, type == 'SUTs') %>%
+heatscatter2x2(., ycol = 'Chipseq_mean', method='spearman')
+```
+
+```{r heatscatters body pA- end pA+ vs Rpb3 ChIPseq means only CUTs}
+filter(both_df, type == 'CUTs') %>%
+heatscatter2x2(., ycol = 'Chipseq_mean', method='spearman')
+```
+
+
+#### with NETseq
+
+Correlations
+```{r}
+both_df %>%
+  summarise(cor_pearson_xmean = cor(scaled_reads, NETseq_mean, method='pearson', use='pairwise.complete'),
+            cor_spearman_xmean = cor(scaled_reads, NETseq_mean, method='spearman', use='pairwise.complete')) %>%
+  kable
+```
+
+
+
+```{r heatscatters body pA- end pA+ vs NETseq}
+heatscatter2x2(both_df, ycol = 'NETseq_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs NETseq only ORFs}
+filter(both_df, type == 'ORF-T') %>%
+heatscatter2x2(., ycol = 'NETseq_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs NETseq only SUTs}
+filter(both_df, type == 'SUTs') %>%
+heatscatter2x2(., ycol = 'NETseq_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs NETseq only CUTs}
+filter(both_df, type == 'CUTs') %>%
+heatscatter2x2(., ycol = 'NETseq_mean', method='pearson')
+```
+
+
+
+#### with RNAPII CRAC Milligan
+
+Correlations
+```{r}
+both_df %>%
+  summarise(cor_pearson_xmean = cor(scaled_reads, CRAC_mean, method='pearson', use='pairwise.complete'),
+            cor_spearman_xmean = cor(scaled_reads, CRAC_mean, method='spearman', use='pairwise.complete')) %>%
+  kable
+```
+
+
+
+```{r heatscatters body pA- end pA+ vs CRAC}
+heatscatter2x2(both_df, ycol = 'CRAC_mean', method='pearson')
+```
+
+
+```{r heatscatters body pA- end pA+ vs CRAC only ORFs}
+filter(both_df, type == 'ORF-T') %>%
+heatscatter2x2(., ycol = 'CRAC_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs CRAC only SUTs}
+filter(both_df, type == 'SUTs') %>%
+heatscatter2x2(., ycol = 'CRAC_mean', method='pearson')
+```
+
+```{r heatscatters body pA- end pA+ vs CRAC only CUTs}
+filter(both_df, type == 'CUTs') %>%
+heatscatter2x2(., ycol = 'CRAC_mean', method='pearson')
+```
+
+
+```{r}
+sessionInfo()
+```
+

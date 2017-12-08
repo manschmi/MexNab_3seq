@@ -1,0 +1,66 @@
+---
+title: 'Analysis of Roy .. Chanfreau dataset'
+author: "Manfred Schmid"
+output: html_document
+---
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+
+
+Download bedgraph files from **GEO:GSE75587**.
+Data are relative to genome release is SGD R64-2-1 ... very close to sacCer3
+
+
+
+## raw data processing
+
+```{bash, eval = FALSE}
+for f in *.gz
+  do
+    echo $f
+    gunzip $f
+    sort -k1,1 -k2,2n ${f/.gz/} -o ${f/.gz/}
+    /Users/schmidm/ms_tools/bedGraphToBigWig ${f/.gz/} /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes ${f/.bedgraph.gz/.bw}
+   done
+
+
+mkdir bedgraph
+mv *.bedgraph bedgraph/.
+mkdir bw
+mv *.bw bw/.
+
+```
+
+
+
+## metagene analysis
+
+```{bash, eval = FALSE}
+cd /Users/schmidm/Documents/genomewide_datasets/Expression/GSE75587_RAW_RoyChanfreau_3seq_EPAP
+
+plus_bw="bw/GSM22*plus*.bw"
+minus_bw=${plus_bw/plus/minus}
+
+sample_names=$(echo $plus_bw | sed s/GSM......._//g | sed s/bw\\///g | sed s/_plus_strand.bw//g)
+
+div_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed"
+
+python ~/ms_tools/MS_Metagene_Tools/sort_matrix_using_bed.py \
+deeptools_out/ORFT_scaled_pm1k_joined_log2.gz \
+$div_bed -o deeptools_out/ORFT_scaled_pm1k_joined_log2_divergent.gz
+
+plotHeatmap -m deeptools_out/ORFT_scaled_pm1k_joined_log2_divergent.gz \
+      --sortUsing sum \
+      --colorMap Blues --missingDataColor white \
+      --samplesLabel $sample_names \
+      -out deeptools_out/ORFT_scaled_pm1k_joined_log2_divergent_heatmap.pdf
+
+```
+
+
+
+```{r}
+sessionInfo()
+```
+

@@ -140,7 +140,8 @@ non_neg_totals %>%
 non_neg_totals %>%
   filter(rapa == 0, rep == 1, 
          pA == 'pA+' | pA == 'pA-',
-         type != 'other') %>%
+         type != 'other',
+         type != 'XUT') %>%
   ungroup %>%
   mutate(pA = factor(pA, levels=c('pA+', 'pA+ + pA-', 'pA-', 'pA-X'))) %>%
   ggplot(., aes(x=type, y=total_Spnorm_signal, fill=type)) + 
@@ -177,7 +178,7 @@ ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) +
 body_end_percents %>%
   filter(rapa == 0, rep == 1, 
          pA == 'pA+' | pA == 'pA-',
-         type != 'other', type != 'snRNA') %>%
+         type != 'other', type != 'snRNA', type != 'XUT') %>%
   ungroup %>%
   mutate(pA = factor(pA, levels=c('pA+', 'pA+ + pA-', 'pA-', 'pA-X'))) %>%
 ggplot(., aes(x=factor(1), y=total_Spnorm_signal_percent, fill=part)) + 
@@ -222,7 +223,7 @@ both_df %>%
 both_df %>%
   filter(rapa == 0, rep == 1, 
          pA == 'pA+' | pA == 'pA-',
-         type != 'other') %>%
+         type != 'other', type != 'XUT', type != 'snRNA') %>%
   ungroup %>%
   mutate(pA = factor(pA, levels=c('pA+', 'pA+ + pA-', 'pA-', 'pA-X'))) %>%
   violin_plot(.)

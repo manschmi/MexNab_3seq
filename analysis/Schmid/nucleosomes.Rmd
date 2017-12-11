@@ -9,7 +9,7 @@ output: html_document
 
 ```{r, echo=TRUE}
 knitr::opts_chunk$set(fig.width=12, fig.height=8, 
-                      fig.path=paste0('Figures_plus1_nucleosome/'), 
+                      fig.path=paste0('../../Figures/Figures_plus1_nucleosome/'), 
                       dev='pdf', echo=TRUE, warning=FALSE, message=FALSE, 
                       error=TRUE)
 ```
@@ -215,6 +215,7 @@ plotProfile -m deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000_joined_log
 
 
 ##pA masked
+### ups: not part of paper draft
 cd only_pAminus_positions/
 plus_bw="*_Mex67*_0_1*plus*.bw"
 minus_bw="*_Mex67*_0_1*minus*.bw"
@@ -273,6 +274,7 @@ nuc1 %<>%
 ```
 
 
+UPS: masked analysis not part of paper draft !
 ```{r}
 (nuc1_masked <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined.gz'))
 
@@ -333,6 +335,47 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   facet_grid(pA+fraction~., scales='free') + 
   nucleosome_rel_nuc_theme
 ```
+
+
+#### divergent mRNAs only
+
+```{r}
+(div_orfs <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':'))
+```
+
+
+```{r Nuc 2min data rel plus1 nucleosomes divergent ORFs}
+nuc1 %>%
+  group_by(rel_pos, pA, strain,fraction,rapa,rep) %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  filter(is.finite(log2_value), id %in% div_orfs$name) %>%
+  do(tidy(t.test(.$log2_value))) %>%
+ggplot(., aes(x=rel_pos, y=estimate)) +
+  facet_grid(pA+fraction~., scales='free') + 
+  nucleosome_rel_nuc_theme
+```
+
+
+#### tandem mRNAs only
+
+```{r}
+(tandem_orfs <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
+   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':'))
+```
+
+
+```{r Nuc 2min data rel plus1 nucleosomes tandem ORFs}
+nuc1 %>%
+  group_by(rel_pos, pA, strain,fraction,rapa,rep) %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  filter(is.finite(log2_value), id %in% tandem_orfs$name) %>%
+  do(tidy(t.test(.$log2_value))) %>%
+ggplot(., aes(x=rel_pos, y=estimate)) +
+  facet_grid(pA+fraction~., scales='free') + 
+  nucleosome_rel_nuc_theme
+```
+
 
 
 ## Published Txn

@@ -25,91 +25,30 @@ suppressWarnings(library(LSD))
 ```
 
 
-## Loading half-life datasets
+## Loading decay rate datasets
 
-#### DTA 
+### load the decay estimates
 
-from Miller et al., Molecular Systems Biology 7:458, 2010
+from Markdown *Published_decay_measures.Rmd*
 ```{r}
-(miller <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/halflife_and_transcription_rates/Cramer_DTA/Cramer_half-life.txt', col_names=TRUE) %>%
-  mutate(Miller_DR = log(2)/halflife0) %>%
-  dplyr::select(name, Miller_DR))
+load(file='../../data/published_decay_estimates.RData', verbose=TRUE)
+
+DR_literature
 ```
 
-
-#### cDTA 
-
-from Sun et al., Mol. Cell 52, 52–62, 2013
-```{r}
-sun <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/halflife_and_transcription_rates/Cramer_cDTA_Sun2013/Cramer_decay_rates.txt', col_names=TRUE)
-
-sun <- sun[,c(1,3)]
-colnames(sun) <- c('name', 'Sun_DR')
-(sun %<>% mutate(Sun_DR = as.numeric(sub(',', '.', Sun_DR))))
-```
-
-
-```{r}
-DR_literature <- left_join(miller, sun)
-```
-
-```{r}
-heatscatter(DR_literature$Miller_DR, DR_literature$Sun_DR, xlim=c(0,.6), ylim=c(0,.6), cor=TRUE)
-```
-
-```{r}
-cor(DR_literature$Miller_DR, DR_literature$Sun_DR, use='pairwise.complete')
-```
-
-```{r}
-cor(DR_literature$Miller_DR, DR_literature$Sun_DR, use='pairwise.complete', method='spearman')
-```
-
-
-#### Presnyak
-
-from Presnyak et al., 2015, Cell 160, 1111–1124
-```{r}
-(presnyak <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/halflife_and_transcription_rates/Coller_half_life/Coller_halflife.txt', col_names=TRUE, locale=locale(decimal_mark = ",")) %>%
-   dplyr::rename(name = Gene_ID) %>%
-   mutate(Presnyak_pA_DR = log(2)/pA_Half_life,
-          Presnyak_total_DR =  log(2)/Total_Half_life) %>%
-   dplyr::select(name, Presnyak_pA_DR, Presnyak_total_DR)) 
-```
-
-
-```{r}
-DR_literature %<>% left_join(., presnyak)
-```
-
-```{r}
-heatscatter(DR_literature$Presnyak_pA_DR, DR_literature$Sun_DR, xlim=c(0,1), ylim=c(0,1), cor=TRUE)
-```
-
-```{r}
-heatscatter(DR_literature$Presnyak_total_DR, DR_literature$Sun_DR, xlim=c(0,1), ylim=c(0,1), cor=TRUE)
-```
-
-```{r}
-heatscatter(DR_literature$Presnyak_pA_DR, DR_literature$Miller_DR, xlim=c(0,1), ylim=c(0,1), cor=TRUE)
-```
-
-```{r}
-heatscatter(DR_literature$Presnyak_total_DR, DR_literature$Miller_DR, xlim=c(0,1), ylim=c(0,1), cor=TRUE)
-```
 
 
 ## Loading Mex and Nab depletion log2FC
 
 #### load the DESeq2 results
 ```{r}
-load(file='data/DESeq2_10min_results_df.RData', verbose=TRUE)
+load(file='../../data/DESeq2_10min_results_df.RData', verbose=TRUE)
 
 dds_results_df
 ```
 
 ```{r}
-load(file='data/DESeq2_10min_ip_rel_input_results_df.RData', verbose=TRUE)
+load(file='../../data/DESeq2_10min_ip_rel_input_results_df.RData', verbose=TRUE)
 
 dds_ip_rel_in_df
 ```
@@ -179,7 +118,7 @@ ggplot(.,
 ### only genes sig over background
 
 ```{r}
-load('data/DESeq2_10min_IP_rel_neg_results_df.RData', verbose=TRUE)
+load('../../data/DESeq2_10min_IP_rel_neg_results_df.RData', verbose=TRUE)
 
 dds_rel_neg_results_df
 ```
@@ -306,14 +245,14 @@ ggplot(.,
 load the transcription estimates from Markdown Published_txn_estimates_gene_body_counting.Rmd
 
 ```{r}
-load(file='../../Lexogen_RNAseq_2/RProject/data/published_gene_body_txn_estimates.RData', verbose=TRUE)
+load(file='../../data/published_gene_body_txn_estimates.RData', verbose=TRUE)
 
 txn_estimates
 ```
 
 ```{r}
 (txn_estimates %<>%
-  separate(id, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+  separate(name, c('id', 'type', 'name', 'common_name'), sep=':') %>%
   filter(type == 'ORF-T'))
 ```
 

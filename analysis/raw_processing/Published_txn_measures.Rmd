@@ -1,7 +1,9 @@
 ---
-title: 'Published txn estimates, mean counts per gene body'
+title: "Published txn estimates, mean counts per gene body"
 author: "Manfred Schmid"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r, echo=TRUE}
@@ -594,7 +596,7 @@ left_join(rpb3_chip2_ucsc_means, rpb3_chipseq_ucsc_means) %>%
 
 
 ```{r}
-save(txn_estimates, file='data/published_gene_body_txn_estimates.RData')
+save(txn_estimates, file='../data/published_gene_body_txn_estimates.RData')
 ```
 
 ```{r}

@@ -102,8 +102,24 @@ Same procedure for 10min and 2min 4tU labelling data.
 7. 2min_body_end_counts_to_R.Rmd
     + load body_end_counting.Rmd counts for 2min data to R 
     + sanity checks
+    + scale to length
+    + average over replicates
+    + total singals per annotation type
+    + violin plots signal in body and end pA+ and pA-
     
 8. Published_txn_measures.Rmd
+    + load published transcription measures from various sources
+    + combine into a single df
+    + correlation of those estimates with each other
+
+9. Published_decay_measures.Rmd
+    + load published decay rate or half-life measures from various sources
+    + combine into a single df
+    + correlation of those estimates with each other
+    
+10. DR_strategy
+    + reasoning and background for DR estimation from data
+
 
 
 ### ANALYSIS for Tudek et al. Paper
@@ -114,7 +130,7 @@ Same procedure for 10min and 2min 4tU labelling data.
 
 No specific order:
 
-+ DESeq2_10min_data.Rmd 
++ DESeq2_10min_data.Rmd
     ++ Differential expression 15min rapa vs 0min rapa using 
         S.pombe for normalization.
     ++ Differential binding ip rel neg. control 
@@ -127,17 +143,19 @@ No specific order:
     ++ for IPs only genes sig over background in rapa == 0min
     ++ for IPs only genes sig over background at rapa == 0min and 15min
 
++ DR_10min.Rmd
+    ++ estimating decay rates from data
+    ++ includes an approximation for conf.intervals.
+
 + Correlation_10min_data_with_published_halflife_and_txn.Rmd
-    ++ get published decay rate datasets and cross-compare them
+    ++ get published decay rate data from Published_decay_measures.Rmd
     ++ correlate published decay rates with our own data
-    ++ get published transcription data
+    ++ get published transcription data from Published_txn_measures.Rmd
     ++ correlate published txn estimates with our own data
     
 + Body_pAMinus_vs_End_pAPlus_2min_data_vs_rapamycin.Rmd
-    ++ get published decay rate datasets and cross-compare them
-    ++ correlate published decay rates with our own data
-    ++ get published transcription data
-    ++ correlate published txn estimates with our own data
+    ++ violin plots 2min data body pA minus and end pA plus rel rapamycin
+    ++ Wilcoxon rank sum test for relevant comparisons
 
 + termination_decay_correlation.Rmd
     ++ get metagene matrices of log2FC 15/0 values around TES 
@@ -153,7 +171,6 @@ No specific order:
 
 (( in analysis/Schmid ))
 
-
 -> uses only 2min 4tU data
 
 No specific order:
@@ -164,6 +181,9 @@ No specific order:
     + violin plots signal in body and end pA+ and pA-
   
 + correlation_genebody_pAminus_with_published_txn.Rmd
+
++ correlation_genebody_pAminus_with_published_txn_triplicates_separate.Rmd
+    + same as above but for individual replicates without averaging
     
 + heatmaps.Rmd 
     ++ mRNA genes, rescaled to 2kb
@@ -195,8 +215,14 @@ No specific order:
 + 2min_snRNA.Rmd
     ++ heatmaps for snRNA
     ++ single nucleotide precision around TES
+    ++ decay rates for snRNAs
     
-
 + Roy_Chanfreau.Rmd
     ++ analysis of Roy and Chanfreau pA+ pA+,- data in ctrl and exosome deplete
 
++ DR_2min.Rmd
+    ++ various ways of computing the decay rate
+    ++ DR using ip relative input
+    ++ DR using txn (from ip) rel total 
+    ++ DR using txn (from total) rel total 
+    ++ correlation with published decay rates

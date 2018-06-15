@@ -1,7 +1,9 @@
 ---
 title: "DESeq"
 author: "Manfred Schmid"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 `r format(Sys.time(), "%d %B, %Y")`
 
@@ -17,7 +19,6 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
 ```{r load packages}
 library(tidyverse)
 library(magrittr)
-library(knitr)
 library(DESeq2)
 ```
 
@@ -29,15 +30,18 @@ library(DESeq2)
 -> from file Sp_normalization.Rmd
 
 ```{r}
-(Sp_10min_genes_sf <- read.table(file='data/Sp_10min_genes_sf.txt', 
+(Sp_10min_genes_sf <- read.table(file='../../data/Sp_10min_genes_sf.txt', 
                                  col.names=c('sample', 'Sp_sf')))
 ```
 
 ups: remove the 'Pap' (ie EPAP treated test run) samples for this
-
 ```{r}
 Sp_10min_genes_sf %<>% filter(!grepl('Pap', sample))
+```
+
+```{r}
 Sp_sf_10min <- Sp_10min_genes_sf$Sp_sf
+
 names(Sp_sf_10min) <- Sp_10min_genes_sf$sample
 
 Sp_sf_10min
@@ -49,12 +53,18 @@ Sp_sf_10min
 
 ups: remove the 'Pap' (ie EPAP treated test run) samples for this
 
+
+#### get and load count files
 ```{r load and combine S cerevisiae}
 path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq/STAR_bw/KevinRoyAfiltered_bedgraph/bedtools_counts/'
 
 sfx <- '_endpm200_count_sum_per_anno.txt$'
-file_list <- dir(path) %>% keep(grepl(sfx, .) & !grepl('Pap', .))
 
+(file_list <- dir(path) %>% 
+  keep(grepl(sfx, .) & !grepl('Pap', .)))
+```
+
+```{r}
 (counts_df <-
     lapply(file_list, function(fname) {
       read.table(paste0(path, fname, sep = ''),
@@ -71,14 +81,19 @@ file_list <- dir(path) %>% keep(grepl(sfx, .) & !grepl('Pap', .))
 
 
 ## DESeq2
+for log2FC between rapamycin times I chose to do inputs and ips separately. ie the read numbers are expected to differ significantly, so dispersion estimation will be flawed, imho.
+
 
 #### create all info for the DESeq2 run
 ```{r}
-(read_df <- counts_df %>%
+read_df <- counts_df %>%
   dplyr::select(anno, sum, condition) %>%
-   spread(condition, sum) %>%
+  spread(condition, sum) %>%
   tibble::remove_rownames(.) %>%
-  tibble::column_to_rownames(var='anno'))
+  data.frame %>%
+  tibble::column_to_rownames(var='anno')
+
+head(read_df)
 ```
 
 ```{r}
@@ -90,68 +105,95 @@ file_list <- dir(path) %>% keep(grepl(sfx, .) & !grepl('Pap', .))
 ```
 
 
-#### create the DESeq2 object
+#### create the DESeq2 objects for input and ip
 ```{r}
-ddsFullCountTable <- DESeqDataSetFromMatrix(
-countData = read_df,
-colData = coldata,
+in_ddsFullCountTable <- DESeqDataSetFromMatrix(
+countData = read_df[,grepl('_in_', colnames(read_df))],
+colData = coldata[coldata$fraction == 'in',],
+design = ~ condition)
+
+ip_ddsFullCountTable <- DESeqDataSetFromMatrix(
+countData = read_df[,grepl('_ip_', colnames(read_df))],
+colData = coldata[coldata$fraction == 'ip',],
 design = ~ condition)
 ```
 
+
 #### apply S.pombe size factors
+
 ```{r}
-colnames(ddsFullCountTable) == names(Sp_sf_10min)
+sizeFactors(in_ddsFullCountTable) <- Sp_sf_10min[colnames(in_ddsFullCountTable)]
+
+sizeFactors(ip_ddsFullCountTable) <- Sp_sf_10min[colnames(ip_ddsFullCountTable)]
 ```
 
 ```{r}
-sizeFactors(ddsFullCountTable) <- Sp_sf_10min
+dds_in <-  estimateDispersions(in_ddsFullCountTable)
+dds_ip <-  estimateDispersions(ip_ddsFullCountTable)
+
+dds_in <-  nbinomWaldTest(dds_in)
+dds_ip <-  nbinomWaldTest(dds_ip)
 ```
 
-```{r}
-dds <-  estimateDispersions(ddsFullCountTable)
-dds <-  nbinomWaldTest(dds)
-```
-
 
 ```{r}
-save(dds, file='data/DESeq2_dds_10min_Sp_sf.RData')
+save(dds_in, file='../../data/DESeq2_dds_in_10min_Sp_sf.RData')
+save(dds_ip, file='../../data/DESeq2_dds_ip_10min_Sp_sf.RData')
 ```
 
 
 
 #### alt start point:
 ```{r, eval = FALSE}
-load('data/DESeq2_dds_10min_Sp_sf.RData')
+load('../../data/DESeq2_dds_in_10min_Sp_sf.RData', verbose=TRUE)
+load('../../data/DESeq2_dds_ip_10min_Sp_sf.RData', verbose=TRUE)
 ```
 
 
 
 ## Differential expression
 
-#### comparisons
+
+Do the DESeq2 differential expression
+
+#### DESeq2 results input
 ```{r}
 comparisons <- list(
-  c('Mex_in_15', 'Mex_in_0'),
-  c('Mex_ip_15', 'Mex_ip_0'),
-  c('Nab_in_15', 'Nab_in_0'),
-  c('Nab_ip_15', 'Nab_ip_0')
+  c('Mex_in_15', 'Mex_in_0'), c('Nab_in_15', 'Nab_in_0')
 )
 
-names(comparisons) <- c('Mex_in_15rel0',
-  'Mex_ip_15rel0', 
-  'Nab_in_15rel0', 
-  'Nab_ip_15rel0')
+names(comparisons) <- c('Mex_in_15rel0', 'Nab_in_15rel0')
+
+(dds_in_results <- lapply(comparisons, function(comp) 
+  results(dds_in, 
+          contrast=c('condition', comp))))
 ```
 
 
+#### DESeq2 results ip
 ```{r}
-dds_results <- lapply(comparisons, function(comp) results(dds, contrast=c('condition', comp)))
+comparisons <- list(
+  c('Mex_ip_15', 'Mex_ip_0'), c('Nab_ip_15', 'Nab_ip_0')
+)
+
+names(comparisons) <- c('Mex_ip_15rel0', 'Nab_ip_15rel0')
+
+(dds_ip_results <- lapply(comparisons, function(comp) 
+  results(dds_ip, 
+          contrast=c('condition', comp))))
+```
+
+combine input and ips
+```{r}
+dds_results <- c(dds_in_results, dds_ip_results)
 ```
 
 
-#### MA plots of these
+
+#### MA plots
 ```{r MA plots}
-lapply(seq_along(dds_results), function(i) plotMA(dds_results[[i]], main=names(dds_results)[i]))
+lapply(seq_along(dds_results), function(i) 
+  plotMA(dds_results[[i]], main=names(dds_results)[i]))
 ```
 
 
@@ -160,7 +202,8 @@ lapply(seq_along(dds_results), function(i) plotMA(dds_results[[i]], main=names(d
 
 Collect into one large dataframe
 ```{r}
-(dds_results_df <- lapply(seq_along(dds_results), function(i) dds_results[[i]] %>% 
+(dds_results_df <- lapply(seq_along(dds_results), 
+                          function(i) dds_results[[i]] %>% 
   data.frame %>% 
   tibble::rownames_to_column(var='anno') %>% 
   mutate(comparison = names(dds_results)[i])) %>%
@@ -173,14 +216,14 @@ and fix the XUTs that were annotated differently ...
 ```{r}
 dds_results_df %<>%
   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-  mutate(name = ifelse(id =='XUT', type, name),
-         type = ifelse(id =='XUT', id, type),
-         id = ifelse(id =='XUT', name, id)) 
+  mutate(name = ifelse(id == 'XUT', type, name),
+         type = ifelse(id == 'XUT', id, type),
+         id = ifelse(type == 'XUT', name, id))
 ```
 
 
 ```{r}
-save(dds_results_df, file='data/DESeq2_10min_results_df.RData')
+save(dds_results_df, file='../../data/DESeq2_10min_results_df_v2.RData')
 ```
 
 
@@ -189,84 +232,6 @@ save(dds_results_df, file='data/DESeq2_10min_results_df.RData')
 
 ```{r MA plots per type}
 dds_results_df %>%
-  mutate(sig = (padj < .1 & !is.na(padj))) %>%
-  ggplot(., aes(x=baseMean, y=log2FoldChange, color=sig)) +
-  geom_point(size=.1, alpha=.5) +
-  scale_x_log10() +
-  geom_hline(yintercept = 0) +
-  scale_color_manual(values = c("darkgray", "red")) + 
-  facet_grid(type~comparison) +
-  theme_bw() +
-  theme(panel.grid = element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1),
-        strip.text.x = element_text(size=6)
-        )
-```
-
-
-
-
-
-
-## IP rel input
-
-#### comparisons
-```{r}
-comparisons <- list(
-  c('Mex_ip_0', 'Mex_in_0'),
-  c('Nab_ip_0', 'Nab_in_0')
-)
-
-names(comparisons) <- c('Mex_0_ip_rel_in',
-  'Nab_0_ip_rel_in')
-```
-
-
-```{r}
-dds_ip_rel_in <- lapply(comparisons, function(comp) results(dds, contrast=c('condition', comp)))
-```
-
-
-#### MA plots of these
-```{r MA plots ip rel input}
-lapply(seq_along(dds_ip_rel_in), function(i) plotMA(dds_ip_rel_in[[i]], main=names(dds_ip_rel_in)[i]))
-```
-
-
-
-#### Results to one tbl_df
-
-Collect into one large dataframe
-```{r}
-(dds_ip_rel_in_df <- lapply(seq_along(dds_ip_rel_in), function(i) dds_ip_rel_in[[i]] %>% 
-  data.frame %>% 
-  tibble::rownames_to_column(var='anno') %>% 
-  mutate(comparison = names(dds_ip_rel_in)[i])) %>%
-  bind_rows %>%
-  tbl_df)
-```
-
-separate full annotations
-and fix the XUTs that were annotated differently ...
-```{r}
-dds_ip_rel_in_df %<>%
-  separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-  mutate(name = ifelse(id =='XUT', type, name),
-         type = ifelse(id =='XUT', id, type),
-         id = ifelse(id =='XUT', name, id)) 
-```
-
-
-```{r}
-save(dds_ip_rel_in_df, file='data/DESeq2_10min_ip_rel_input_results_df.RData')
-```
-
-
-
-#### MA plots with type etc....
-
-```{r MA plots ip rel input per type}
-dds_ip_rel_in_df %>%
   mutate(sig = (padj < .1 & !is.na(padj))) %>%
   ggplot(., aes(x=baseMean, y=log2FoldChange, color=sig)) +
   geom_point(size=.1, alpha=.5) +
@@ -298,12 +263,10 @@ names(comparisons) <- c('Mex_ip_0relneg',
   'Mex_ip_15relneg', 
   'Nab_ip_0relneg', 
   'Nab_ip_15relneg')
+
+dds_rel_neg <- lapply(comparisons, function(comp) results(dds_ip, contrast=c('condition', comp)))
 ```
 
-
-```{r}
-dds_rel_neg <- lapply(comparisons, function(comp) results(dds, contrast=c('condition', comp)))
-```
 
 
 #### Results to one tbl_df
@@ -319,18 +282,17 @@ Collect into one large dataframe
 ```
 
 separate full annotations
-and fix the XUTs that were annotated differently ...
 ```{r}
 dds_rel_neg_results_df %<>%
   separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
-  mutate(name = ifelse(id =='XUT', type, name),
-         type = ifelse(id =='XUT', id, type),
-         id = ifelse(id =='XUT', name, id)) 
+  mutate(name = ifelse(id == 'XUT', type, name),
+         type = ifelse(id == 'XUT', id, type),
+         id = ifelse(type == 'XUT', name, id))
 ```
 
 
 ```{r}
-save(dds_rel_neg_results_df, file='data/DESeq2_10min_IP_rel_neg_results_df.RData')
+save(dds_rel_neg_results_df, file='../../data/DESeq2_10min_IP_rel_neg_results_df_v2.RData')
 ```
 
 
@@ -354,6 +316,8 @@ dds_rel_neg_results_df %>%
 ```
 
 --> very good enrichment of essentially all classes and experiments...
+
+
 
 ```{r}
 sessionInfo()

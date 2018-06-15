@@ -135,6 +135,99 @@ ggplot(., aes(x=rel_pos, y=value)) +
 ```
 
 
+
+## Decay rates from those data
+
+```{r}
+(DR_snRNAs <- snrna %>%
+  filter(rapa == 0) %>%
+  group_by(id, rel_pos, pA, fraction, rapa) %>%
+  summarize(mean_C = mean(value)) %>%
+  spread(fraction, mean_C) %>%
+  mutate(ip_in_ratio = ip/input,
+         DR = -log(1-ip_in_ratio)/2,
+         DR = ifelse(ip == pseudocount | input == pseudocount, NA, DR)))
+```
+
+```{r DR violins all positions summed}
+DR_snRNAs %>%
+  ggplot(., aes(x=pA, y=DR, fill=pA)) +
+  geom_violin() +
+  geom_boxplot(width=.2, 
+               outlier.shape = NA, 
+               outlier.color = NULL, 
+               fill='lightgray') +
+  scale_y_log10() +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw()
+```
+
+```{r DR points by positions}
+DR_snRNAs %>%
+  ggplot(., aes(x=rel_pos, y=DR, fill=pA)) +
+  geom_point() +
+  scale_y_log10() +
+  facet_grid(.~pA) +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw()
+```
+
+```{r DR violin pAminus per position}
+DR_snRNAs %>%
+  filter(pA == 'pA-') %>%
+  ggplot(., aes(x=as.factor(rel_pos), y=DR)) +
+  geom_violin(alpha=.2) +
+  stat_summary(fun.y=median, geom="line", aes(group=1, color='red'), size=1)  + 
+  geom_jitter() +
+  scale_y_log10() +
+  facet_grid(.~pA) +
+  scale_fill_brewer(palette='Set1') +
+  scale_color_brewer(palette='Set1') +
+  theme_bw()
+```
+
+
+```{r DR boxplot and jitter pAminus per position with y scale as major Figure}
+DR_snRNAs %>%
+  filter(pA == 'pA-') %>%
+  ggplot(., aes(x=as.factor(rel_pos), y=DR)) +
+  geom_boxplot(width=.5, 
+               outlier.shape = NA, 
+               outlier.color = NULL, 
+               fill='lightgray') +
+  stat_summary(fun.y=median, geom="line", aes(group=1, color='red'), size=1)  + 
+  geom_jitter(size=.1) +
+  scale_y_log10() +
+  facet_grid(.~pA) +
+  coord_cartesian(ylim=c(.00001,10)) +
+  scale_fill_brewer(palette='Set1') +
+  scale_color_brewer(palette='Set1') +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+
+most stable snRNAs
+```{r}
+DR_snRNAs %>%
+  filter(pA == 'pA-', rel_pos == 0) %>%
+  arrange(DR)
+```
+
+DR per position medians
+```{r}
+DR_snRNAs %>%
+  group_by(pA, rel_pos) %>%
+  filter(!is.na(DR)) %>%
+  summarize(median_DR = median(DR)) %>%
+  spread(pA, median_DR)
+```
+
+```{r}
+save(DR_snRNAs, file='../../data/2min_DR_snRNAs.RData')
+```
+
+
 ```{r}
 sessionInfo()
 ```

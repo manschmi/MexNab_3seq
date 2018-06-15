@@ -1,0 +1,363 @@
+---
+title: 'Estimation of Decay rates 2 min data average of strains'
+author: "Manfred Schmid"
+output: 
+  pdf_document: 
+    toc: true 
+    toc_depth: 3
+    fig_caption: true
+---
+
+
+## Setup
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup, echo=TRUE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_DR_avg/'), 
+                      dev='pdf', 
+                      echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(DESeq2))
+suppressWarnings(library(broom))
+suppressWarnings(library(knitr))
+```
+
+
+## Loading triplicate raw data
+
+#### Load
+
+```{r}
+load('../../data/2min_raw_counts.RData', verbose=TRUE)
+
+counts_df
+```
+
+#### clean up and select relevant data
+
+1. split anno  
+2. split condition col   
+3. remove XUTs, aka we don't use XUTs here...
+4. keep only rapa == 0
+
+```{r}
+(counts_df %<>%
+  filter(!grepl('XUT', anno)) %>%
+  tidyr::separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_') %>%
+  tidyr::separate(anno, c('id', 'type', 'name', 'common_name'), sep=':'))
+```
+
+
+#### size factors
+```{r}
+(Sp_2min_genes_sf <- read.table(file='../../data/Sp_2min_genes_sf.txt', 
+                                 col.names=c('condition', 'Sp_sf')))
+```
+
+```{r}
+(Sp_2min_genes_sf %<>% 
+  tidyr::separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_'))
+```
+
+
+#### briefly compare samples
+
+raw value distribution in replicates
+```{r densities raw counts per sample}
+counts_df %>%
+  ggplot(., aes(x=log10(sum), color=rapa, linetype=rep)) +
+  geom_density() +
+  facet_grid(Pap+strain~part+fraction)
+```
+
+
+## Step 1: normalize data
+
+### Step 1.1 scale using sizeFactors
+
+$$ C = R/sf $$ 
+
+```{r}
+(counts_df %<>%
+  left_join(., Sp_2min_genes_sf) %>%
+  mutate(C = sum/Sp_sf))
+```
+
+
+corrected value distribution in replicates
+```{r sf-corrected counts per sample}
+counts_df %>%
+  ggplot(., aes(x=log10(C), color=rapa, linetype=rep)) +
+  geom_density() +
+  facet_grid(Pap+strain~part+fraction)
+```
+
+
+### Step 1.2 average over replicates
+
+#### mean and variance for triplicates condition
+
+For all conditions (except negative IP, see below) we have triplicates. For further calculations we average those by computing mean and variance over triplicates.
+
+Get raw variance from normalized data for each group within each comparison
+```{r}
+(per_cond <- counts_df %>%
+  group_by(part, Pap, strain, fraction, rapa, id, type, name) %>%
+  summarize(mean_C = mean(C),
+            var_C = var(C)))
+```
+
+
+#### comparison between strains
+```{r Mex vs Nab sf-corrected counts per sample}
+per_strain <- per_cond %>%
+  dplyr::select(-var_C) %>%
+  spread(strain, mean_C) 
+```
+
+```{r}
+per_strain %>%
+  ggplot(., aes(x=log10(Mex67AA), y=log10(Nab2AA))) +
+  geom_point() +
+  facet_grid(Pap~part+fraction+rapa) +
+  geom_abline(slope=1, color='orange')
+```
+
+```{r}
+per_strain %>%
+  filter(rapa != 70, rapa != 'neg0') %>%
+  group_by(Pap, part, fraction, rapa) %>%
+  do(tidy(lm(.$Nab2AA ~ .$Mex67AA))) %>%
+  dplyr::select(-std.error, -statistic, -p.value) %>%
+  spread(term, estimate) %>%
+  kable
+```
+
+--> overall Mex and Nab seem correlated with a coefficient of around 1 and we can thus average over strains
+
+#### average strains
+```{r}
+(avg_strain <- per_strain %>%
+  mutate(mean_mean_C = (Mex67AA+Nab2AA)/2))
+```
+
+
+### Step 1.3: subtrack background from IPs
+$$ C_{prod} = C_{ip} - C_{neg} $$
+
+
+Get neg ip samples:  
+```{r}
+(C_neg <- avg_strain %>%
+  ungroup %>%
+  filter(rapa == 'neg0', fraction == 'ip') %>%
+  dplyr::select(-fraction, -rapa, -mean_mean_C, -Nab2AA) %>%
+  dplyr::rename(C_neg_ip = Mex67AA))
+```
+
+
+Get ip samples:  
+```{r}
+(C_ip <- avg_strain %>%
+  ungroup %>%
+  filter(fraction == 'ip', rapa != 'neg0') %>%
+  dplyr::select(-fraction, -Mex67AA, -Nab2AA) %>%
+  dplyr::rename(C_ip = mean_mean_C))
+```
+
+
+Get input samples:  
+```{r}
+(C_in <- avg_strain %>%
+  ungroup %>%
+  filter(fraction == 'input', rapa != 'neg') %>%
+  dplyr::select(-fraction, -Mex67AA, -Nab2AA) %>%
+  dplyr::rename(C_in = mean_mean_C))
+```
+
+
+Join them side-by-side:  
+```{r}
+(wide <- left_join(C_in, C_ip) %>% 
+  left_join(., C_neg))
+```
+
+
+## Step 2: Estimating a decay rate
+
+In the dataframe above the column *mean_C* refers to $C$ and the *dispvar_C* is the **moderated** variance of the mean.
+
+We first need clean the *ip* since it contains **contamination** that is estimated in a negative control sample.
+
+$$ C_{prod} = C_{ip} - C_{neg} $$
+
+We can then in principle calculate the decay rate ... however there is still a major issue that the $sf$ from labelled and total RNA are not directly comparable. But estimation of the decay rate requires this. 
+
+For a first analysis we assume they are directly comparable.
+
+
+```{r}
+(DR_2min <- wide %>%
+  mutate(C_ip_BGsub = ifelse( (C_ip - C_neg_ip) > 0, 
+                              C_ip - C_neg_ip, 
+                              0),
+         ip_in_ratio = C_ip_BGsub/C_in,
+         DR_raw = -log(1-ip_in_ratio)/2))
+```
+
+
+Check out the $ip/input$ ratios:  
+
+```{r}
+hist(DR_2min$ip_in_ratio, breaks=200)
+```
+
+We observe that $ip/total$ ratio is often $>1$, so the normalized IP values are often higher than input. (Note: this is after background subtraction!) This is theoretically impossible and hence the normalized IP values must therefore be **overscaled**. To solve this we will apply a correction factor  $cf_{prod}$ to correct scaling of the $C_{ip}$.
+
+
+
+#### Rescaling ip relative input
+
+A simple assumption could be that with 2min gene body are close to fully labelled. 
+
+First get an impression of how the ratio is based by ip levels:
+```{r ip rel input vs ip}
+DR_2min %>%
+  ggplot(., aes(x=C_ip_BGsub, y=ip_in_ratio)) +
+  geom_point(size=.3, alpha=.2) +
+  scale_x_log10() + scale_y_log10() +
+  facet_grid(Pap~part+rapa) +
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+```
+
+Seems like even gene body and end behave roughly equal for pA- and pA+ data, although overall pA+ data has much lower ratios. But this could be a bias from using S.pombe for normalization (ie pA+ vs pA- may not behave similar for S.pombe and cerevisiae!!).
+
+For the xPap samples a 100% efficiency of labelling can be glimpsed at a ratio of roughly 10. 
+For the noPap samples its somewhere around 1.
+
+We could simply use these numbers straight for now. Such as:  
+```{r}
+cor_factor <- data.frame(Pap = c('xPap', 'noPap'),
+                 cf = c(1/10, 1))
+```
+
+
+However, its probably better to estimate this from data, for now we simply use genes with C_ip_BGsub > 10 and rapa=0 values and take their mean. 1/mean is then the correction factor to apply.
+
+```{r}
+(cor_factor <- DR_2min %>%
+  group_by(Pap, part, rapa) %>%
+  dplyr::select(ip_in_ratio, C_ip_BGsub) %>%
+  filter(C_ip_BGsub > 10, is.finite(ip_in_ratio)) %>%
+  filter(ip_in_ratio > quantile(na.omit(ip_in_ratio), .95)) %>%
+  summarize(cf = 1/mean(ip_in_ratio)))
+```
+
+
+Most approriate seems to use the end values since there is the highest ip/input ratio
+
+```{r}
+(cor_factor %<>%
+  ungroup %>%
+  filter(rapa == 0,
+         part == 'end') %>%
+  dplyr::select(-rapa, -part))
+```
+
+
+
+apply this for DR calculations:
+
+```{r}
+(DR_2min %<>% left_join(., cor_factor) %>%
+  mutate(corrected_ip_in_ratio = cf * (C_ip_BGsub/C_in),
+         DR = -log(1-corrected_ip_in_ratio)/2))
+  
+```
+
+
+```{r DR raw vs rescaled using top 5percent}
+DR_2min %>%
+  ggplot(., aes(x=DR_raw, y=DR)) +
+  geom_point(size=.3, alpha=.2) +
+  facet_grid(Pap~part+rapa, scales='free')
+```
+
+clearly related but is not a linear relationshop. The scaled one reach a maximum defined by our anchor point the median of the top 5%...
+
+
+```{r}
+DR_2min %<>%
+  mutate(type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'other')))
+```
+
+
+#### save this
+```{r}
+save(DR_2min, file='../../data/2min_DR_strain_avg_with_scaled_values.RData')
+```
+
+
+#### DR between types
+
+```{r DR violins noPap end rapa0}
+DR_2min %>%
+  filter(rapa == 0, Pap == 'noPap', part == 'end',
+         type != 'other') %>%
+  ggplot(., aes(x=type, y=DR, fill=type)) +
+  geom_violin() +
+  scale_y_log10() +
+  theme_bw()
+```
+
+```{r DR violins part and Pap facets rapa0}
+DR_2min %>%
+  filter(rapa == 0,
+         type != 'other') %>%
+  ggplot(., aes(x=type, y=DR, fill=type)) +
+  geom_violin() +
+  geom_boxplot(width=.2, outlier.shape = NA, outlier.color = NULL, fill='lightgray') +
+  scale_y_log10() +
+  facet_grid(.~part+Pap) +
+  theme_bw()
+```
+
+
+
+#### DR pA+ vs pA+-
+
+One could assume that mRNAs are generally pA+ and hence the DR estimated using pA+ and pA+- data should be similar. Check this out:
+```{r DR pA+ vs pA-}
+DR_2min %>%
+  dplyr::select(Pap, part, rapa, id, type, DR) %>%
+  filter(type != 'ORF-T') %>%
+  spread(Pap, DR) %>%
+  ggplot(., aes(x=noPap, y=xPap)) +
+  geom_point() +
+  facet_grid(.~rapa) +
+  scale_x_log10() + scale_y_log10() +
+  geom_abline(slope=1, color='orange')
+```
+
+looks like generally the xPap derived DR is generally somewhat lower than the noPap-derived one...
+
+could be due to that gene end signals in xPap include txn signal. However this would be expected to bias towards estimating a higher DR.
+
+Also: there is many more genes above BG in xPAP samples ... possibly because xPap looks like total RNA and IP have higher pA-/pA+ ratio than total RNA
+
+On the other hand the correction factor very likely plays a very important role here too....
+
+
+
+```{r}
+sessionInfo()
+```

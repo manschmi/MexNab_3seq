@@ -1,12 +1,18 @@
 ---
 title: "Body and end signal for the various samples and compare rapa effect"
 author: "Manfred Schmid"
-output: html_document
+output: 
+  pdf_document:
+    toc: true 
+    toc_depth: 3
+    fig_caption: true
 ---
-`r format(Sys.time(), "%d %B, %Y")`
 
+`r format(Sys.time(), "%d %B, %Y; %R")`
+
+## Setup
 ```{r setup}
-knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_vs_rapa/', dev='pdf')
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'Figures_body_end_vs_rapa_v2/', dev='pdf')
 ```
 
 ```{r, message=FALSE,warning=FALSE}
@@ -20,7 +26,7 @@ suppressWarnings(library('broom'))
 ## Load the normalized signal
 
 ```{r}
-load(file='data/norm_2min_body_end_scaled_and_BGsub.RData', verbose=TRUE)
+load(file='../../data/norm_2min_body_end_scaled_and_BGsub.RData', verbose=TRUE)
 
 both_df
 ```
@@ -30,10 +36,10 @@ both_df
 
 
 ```{r}
-both_df_avg <- both_df %>%
+(both_df_avg <- both_df %>%
   group_by(id, type, part, pA, Pap, strain, fraction, rapa) %>%
   summarize(scaled_reads = mean(scaled_reads)) %>%
-  unite(pA_part, c(pA, part), sep='_')
+  unite(pA_part, c(pA, part), sep='_'))
 ```
 
 
@@ -56,9 +62,9 @@ both_df_avg %>%
 
 #### Subset to only interesting samples and ORF-Ts
 ```{r}
-both_df_avg_ORFs <- both_df_avg %>%
+(both_df_avg_ORFs <- both_df_avg %>%
   filter(rapa != 70, type == 'ORF-T',
-         pA_part == 'pA-_body' | pA_part == 'pA+_end')
+         pA_part == 'pA-_body' | pA_part == 'pA+_end'))
 ```
 
 ```{r violin plot rapa 0 15 ORF-Ts}
@@ -168,7 +174,7 @@ aboveBG_wilcox <- both_df_avg_spread %>%
 kable(aboveBG_wilcox)
 ```
 
-3.  for the log-scaled violins without pseudocounts -> test with 0 and negatives removed
+3.  for the log-scaled violins without pseudocounts -> all
 ```{r}
 all_wilcox <- both_df_avg_spread %>%
   do(tidy(wilcox.test(.$rapa_15, .$rapa_0))) 
@@ -185,6 +191,8 @@ plot(pseudocount_wilcox$p.value~aboveBG_wilcox$p.value)
 plot(pseudocount_wilcox$p.value~all_wilcox$p.value)
 ```
 
+
+The test with only genes above BG seems overall a bad idea since the information that many genes drop to background levels is lost there. Pseudocounting and general wilcox give very similar results and are preferable.
 
 
 ```{r}

@@ -1,10 +1,16 @@
 ---
 title: "Mex vs Nab scatters"
 author: "Manfred Schmid"
-output: html_document
+output: 
+  pdf_document:
+    toc: true 
+    toc_depth: 3
+    fig_caption: true
 ---
-`r format(Sys.time(), "%d %B, %Y")`
 
+`r format(Sys.time(), "%d %B, %Y; %R")`
+
+## Setup
 ```{r setup, echo=TRUE}
 knitr::opts_chunk$set(fig.width=12, fig.height=8, 
                       fig.path=paste0('Figures_Mex_vs_Nab_scatters_10min_data/'), 
@@ -15,19 +21,32 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
 
 
 ```{r load packages}
-library(tidyverse)
-library(magrittr)
-library(knitr)
-library(broom)
+suppressWarnings(library('tidyverse'))
+suppressWarnings(library('magrittr'))
+suppressWarnings(library('knitr'))
+suppressWarnings(library('broom'))
 ```
 
 
 
 ## load the DESeq2 results
 ```{r}
-load(file='data/DESeq2_10min_results_df.RData', verbose=TRUE)
+load(file='../../data/DESeq2_10min_results_df_v2.RData', verbose=TRUE)
 
 dds_results_df
+```
+
+#### fix annotation types
+
+We only consider ORF-Ts (and call them mRNA), SUTs and XUTs
+
+```{r}
+dds_results_df %<>%
+  filter(type == 'ORF-T' | type == 'SUTs' | type == 'XUT' ) %>%
+  mutate(type = ifelse(type == 'ORF-T', 'mRNAs', type),
+         type = ifelse(type == 'XUT', 'XUTs', type),
+         type = factor(type,
+                       levels=c('mRNAs', 'SUTs', 'XUTs')))
 ```
 
 
@@ -42,12 +61,33 @@ dds_results_df
 ```{r}
 scatter_theme <- list(geom_point(size=.2, alpha=.2), 
   stat_smooth(method='lm'), 
-  facet_wrap(~type), 
+  facet_grid(.~type), 
   xlim(-4,4), ylim(-4,4),
   geom_hline(yintercept = 0, color='orange'), 
   geom_vline(xintercept = 0, color='orange'), 
   theme_bw())
 ```
+
+
+note: no infinites in the log2FCs
+```{r}
+LFC_spread %>%
+  filter(is.infinite(Mex_in_15rel0) | 
+           is.infinite(Nab_in_15rel0) | 
+           is.infinite(Mex_ip_15rel0) | 
+           is.infinite(Nab_ip_15rel0))
+```
+
+but there are *NAs* of course
+```{r}
+LFC_spread %>%
+  gather(condition, log2FC, -id, -type) %>%
+  filter(is.na(log2FC)) %>%
+  group_by(condition, type) %>%
+  summarize(na_cnt = n())
+```
+
+but actually very few.
 
 
 ### inputs
@@ -56,40 +96,44 @@ ggplot(LFC_spread, aes(x=Mex_in_15rel0, y=Nab_in_15rel0)) +
   scatter_theme
 ```
 
-#### number of genes in plot
+#### number of genes in input plot
 ```{r}
 LFC_spread %>%
-  filter(!is.na(Mex_in_15rel0), !is.na(Nab_in_15rel0), is.finite(Mex_in_15rel0), is.finite(Nab_in_15rel0)) %>%
+  filter(!is.na(Mex_in_15rel0), 
+         !is.na(Nab_in_15rel0)) %>%
   group_by(type) %>%
   summarise(n = n())
 ```
 
-#### mean and medians
+#### mean and medians input of data shown in plot
 ```{r}
 LFC_spread %>%
-  filter(!is.na(Mex_in_15rel0), !is.na(Nab_in_15rel0)) %>%
+  filter(!is.na(Mex_in_15rel0), 
+         !is.na(Nab_in_15rel0)) %>%
   group_by(type) %>%
-  summarise(mean_mex = mean(Mex_in_15rel0),
-            median_mex = median(Mex_in_15rel0),
-            mean_nab = mean(Nab_in_15rel0), 
-            median_nab = median(Nab_in_15rel0),
-            n = n())
+  summarise(mean_mex_in = mean(Mex_in_15rel0),
+            median_mex_in = median(Mex_in_15rel0),
+            mean_nab_in = mean(Nab_in_15rel0), 
+            median_nab_in = median(Nab_in_15rel0),
+            n = n()) %>%
+  kable
 ```
 
-note: no infinites in the log2FCs
 
 #### pearson correlation
 ```{r}
 LFC_spread %>%
   group_by(type) %>%
-  do(tidy(cor.test(.$Mex_in_15rel0, .$Nab_in_15rel0, method='pearson')))
+  do(tidy(cor.test(.$Mex_in_15rel0, .$Nab_in_15rel0, method='pearson'))) %>%
+  kable
 ```
 
 #### spearman correlation
 ```{r}
 LFC_spread %>%
   group_by(type) %>%
-  do(tidy(cor.test(.$Mex_in_15rel0, .$Nab_in_15rel0, method='spearman')))
+  do(tidy(cor.test(.$Mex_in_15rel0, .$Nab_in_15rel0, method='spearman'))) %>%
+  kable
 ```
 
 #### histograms
@@ -109,7 +153,8 @@ ggplot(LFC_spread, aes(x=Mex_in_15rel0)) +
 
 ```{r histograms Nab input 15}
 ggplot(LFC_spread, aes(x=Nab_in_15rel0)) +
-  histogram_theme
+  histogram_theme +
+  coord_flip()
 ```
 
 
@@ -127,21 +172,25 @@ LFC_spread %>%
   summarise(mean_mex = mean(Mex_ip_15rel0),
             median_mex = median(Mex_ip_15rel0),
             mean_nab = mean(Nab_ip_15rel0), 
-            median_nab = median(Nab_ip_15rel0))
+            median_nab = median(Nab_ip_15rel0),
+            n = n()) %>%
+  kable
 ```
 
 #### pearson correlation
 ```{r}
 LFC_spread %>%
   group_by(type) %>%
-  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson')))
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson'))) %>%
+  kable
 ```
 
 #### spearman correlation
 ```{r}
 LFC_spread %>%
   group_by(type) %>%
-  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman')))
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman'))) %>%
+  kable
 ```
 
 #### histograms
@@ -153,17 +202,29 @@ ggplot(LFC_spread, aes(x=Mex_ip_15rel0)) +
 
 ```{r histograms Nab ip 15}
 ggplot(LFC_spread, aes(x=Nab_ip_15rel0)) +
-  histogram_theme
+  histogram_theme +
+  coord_flip()
 ```
 
 
 ### IPs only gene sig over background
 
+
 #### load sig. enrichments
 ```{r}
-load('data/DESeq2_10min_IP_rel_neg_results_df.RData', verbose=TRUE)
+load('../../data/DESeq2_10min_IP_rel_neg_results_df_v2.RData', verbose=TRUE)
 
 dds_rel_neg_results_df
+```
+
+clean up types as above
+```{r}
+dds_rel_neg_results_df %<>%
+  filter(type %in% c('ORF-T', 'SUTs', 'XUT')) %>%
+  mutate(type = ifelse(type == 'ORF-T', 'mRNAs', type),
+         type = ifelse(type == 'XUT', 'XUTs', type),
+         type = factor(type,
+                       levels=c('mRNAs', 'SUTs', 'XUTs')))
 ```
 
 
@@ -218,7 +279,7 @@ ggplot(LFC_spread_sig0, aes(x=Mex_ip_15rel0, y=Nab_ip_15rel0)) +
 #### number of genes in plot
 ```{r}
 LFC_spread_sig0 %>%
-  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0), is.finite(Mex_ip_15rel0), is.finite(Nab_ip_15rel0)) %>%
+  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0)) %>%
   group_by(type) %>%
   summarise(n = n())
 ```
@@ -233,21 +294,24 @@ LFC_spread_sig0 %>%
             median_mex = median(Mex_ip_15rel0),
             mean_nab = mean(Nab_ip_15rel0), 
             median_nab = median(Nab_ip_15rel0),
-            n = n())
+            n = n()) %>%
+  kable
 ```
 
 #### pearson correlation
 ```{r}
 LFC_spread_sig0 %>%
   group_by(type) %>%
-  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson')))
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson'))) %>%
+  kable
 ```
 
 #### spearman correlation
 ```{r}
 LFC_spread_sig0 %>%
   group_by(type) %>%
-  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman')))
+  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman'))) %>%
+  kable
 ```
 
 #### histograms
@@ -258,70 +322,8 @@ ggplot(LFC_spread_sig0, aes(x=Mex_ip_15rel0)) +
 
 ```{r histograms Nab ip 15 sig over bkgd 0}
 ggplot(LFC_spread_sig0, aes(x=Nab_ip_15rel0)) +
-  histogram_theme
-```
-
-
-
-#### IPs only gene sig over background at 0 and 15
-
-```{r}
-ids_sigall <- ip_sig_over_bkgd %>%
-  group_by(id) %>%
-  summarize(cnt = n()) %>%
-  filter(cnt == 4)
-
-nrow(ids_sigall)
-```
-
-```{r}
-LFC_spread_sigall <- LFC_spread %>%
-  filter(id %in% ids_sigall$id)
-```
-
-```{r}
-table(LFC_spread_sigall$type)
-```
-
-```{r scatter Mex vs Nab ip 15 sig over bkgd all}
-ggplot(LFC_spread_sigall, aes(x=Mex_ip_15rel0, y=Nab_ip_15rel0)) +
-    scatter_theme
-```
-
-#### mean and medians
-```{r}
-LFC_spread_sigall %>%
-  filter(!is.na(Mex_ip_15rel0), !is.na(Nab_ip_15rel0)) %>%
-  group_by(type) %>%
-  summarise(mean_mex = mean(Mex_ip_15rel0),
-            median_mex = median(Mex_ip_15rel0),
-            mean_nab = mean(Nab_ip_15rel0), 
-            median_nab = median(Nab_ip_15rel0))
-```
-
-#### pearson correlation
-```{r}
-LFC_spread_sigall %>%
-  group_by(type) %>%
-  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='pearson')))
-```
-
-#### spearman correlation
-```{r}
-LFC_spread_sigall %>%
-  group_by(type) %>%
-  do(tidy(cor.test(.$Mex_ip_15rel0, .$Nab_ip_15rel0, method='spearman')))
-```
-
-#### histograms
-```{r histograms Mex ip 15 sig over bkgd all}
-ggplot(LFC_spread_sigall, aes(x=Mex_ip_15rel0)) +
-  histogram_theme
-```
-
-```{r histograms Nab ip 15 sig over bkgd all}
-ggplot(LFC_spread_sigall, aes(x=Nab_ip_15rel0)) +
-  histogram_theme
+  histogram_theme +
+  coord_flip()
 ```
 
 

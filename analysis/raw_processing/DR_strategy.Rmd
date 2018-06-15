@@ -1,0 +1,98 @@
+---
+title: 'Decay rate estimation strategy and background'
+author: "Manfred Schmid"
+output: pdf_document
+---
+
+
+## First order decay rate estimation
+
+Using the amount of total RNA $C_{total}$ and either the amount of RNA removed $C_{decayed}$ or the amount of RNA not decayed $C_{left}$ within a specific time $t$. Where $C$ refers to RNA concentration in arbitrary units (ie nr per cell or µg per million cells, ...).
+
+Note that in steady-state conditions $C_{total}$ is a constant and the amount of RNA removed  must be equal to the RNA produced: $C_{decayed} = C_{prod}$
+
+At any time point t:
+$$ C_{total} = C_{decayed} + C_{left} $$
+
+Assuming a first-order decay of RNA in steady-state condition one can from these numbers compute decay and synthesis rates.
+
+First using first-order decay describes the RNA remaining ie not labelled RNA
+$C_{t}$ at timepoint $t$ and decay rate $k$:
+
+$$\frac{dC}{dt}=-k*C$$
+
+simple differential equation:
+$$\frac{dC}{dt}=-k*C$$
+
+can be solved using $C_{0}=C_{total}$ at $t=0$
+
+$$ln(\frac{C}{C_{0}}) = -k*t$$
+
+so: 
+$$ C_{t} = C_{0} * e^{-k*t} $$
+
+
+In the original notation $C_{t} = C_{left}$.
+
+and hence:
+
+$$C_{prod} = C_{total} - C_{left}$$
+
+filling with the term from above we get:
+$$C_{prod} = C_{total} - C_{total} * e^{-k*t}$$
+or:
+$$C_{prod} = C_{total} *(1 - e^{-k*t})$$
+
+we try to estimate $k$:
+$$e^{-k*t} = 1-\frac{C_{prod}}{C_{total}}$$
+giving:
+$$-k*t = log(1-\frac{C_{prod}}{C_{total}})$$
+and:
+$$k=-\frac{1}{t} * log(1-\frac{C_{prod}}{C_{total}})$$
+
+
+
+## Issue 1: Raw data to $C$
+
+For these formulas to apply we need to know $C_{prod}$ and $C_{total}$. In the experimental setup we only estimate them indirectly via the reads from the RNAseq experiment. Typically we assume a direct relationship between number of reads $R$ inside a gene $g$ such that $R \sim C$, linearily also dependent by gene length $L$ and an unkown linear 'scaling' factor $sf$ (which is assumed independent of gene). This is all proportional, if we need to get reasonable "units" we would have to do additional assumptions on the amount of RNA used for library prep etc. This is not done here but instead I use arbitrary units of library-size normalized and gene-length scaled reads.
+
+$$ C = \frac{1}{sf} * \frac{R_{g}}{L_{g}} $$
+
+Note again: $[C]$ is arbitrary units.
+
+
+We know $R_{g}$ and $L_{g}$ and we know that $sf$ is at a minimum dependent on the amount of RNA used for library preparation. We account for this using **S.pombe** spike-ins. 
+
+We used DESeq2 to make an estimate about the amount of S.pombe spike ins in the different libraries to scale them to relatively the same scale. (see other script)
+
+Concerning length, for this dataset all regions have the same length 
+(ups: except filtered positions !!, but the amount of filtered positions will be constant for all regions, so this will only cause a minor bias for cross-region comparisons, not corrected for yet.)
+
+ergo:
+$$ C_{g} = \frac{R_{g}}{sf}$$
+
+for both total RNA and produced RNA:
+$$ C_{total, g} = \frac{R_{total, g}}{sf_{total}} $$
+$$ C_{prod, g} = \frac{R_{prod, g}}{sf_{prod}} $$
+
+
+## Issue 2: background in ip data
+
+For these assumptions to work we would have to assume that $C_{prod, g}$ is precisely estimated from the amount of RNA 4tU purified ('ip'ed) $C_{ip}$ in the experiment $C_{prod} = C_{ip}$. However, we know that in those experiments that $C_{ip}$ is 'contaminated'. To account for this we did a parallel experiment *neg_ip* that measures the contamination $C_{prod} = C_{ip} + C_{neg_ip}$. Both *ip* and *neg_ip* experiments are done using the same spike-ins so we can end up with the corrected formula:
+$$ C_{prod, g} = \frac{R_{ip, g}}{sf_{ip}} - \frac{R_{neg_ip, g}}{sf_{neg_ip}} $$
+
+
+## Issue 3: sizefactors input vs ip not directly comparable
+However there is still a major issue that the $sf$ from labelled $sf_{prod}$ and total $sf_{total}$ RNA are not directly comparable. That is, they are estimated from S. pombe spike-ins that are *NOT* 100% 4tU labelled. But estimation of the decay rate requires that $C_{prod}$ and $C_{total}$ are directly comparable.
+
+To account for this we add an correction factor to the scaling factor $cf_{prod}$ for the produced RNA calculation:
+$$ C_{prod, g} = cf_{prod} * (\frac{R_{ip, g}}{sf_{ip}} - \frac{R_{neg_ip, g}}{sf_{neg_ip}}) $$
+
+
+So now we can calculate by filling those into: 
+$$k=-\frac{1}{t} * log(1-\frac{C_{prod}}{C_{total}})$$
+
+to get the full calculations applied
+$$k_{g}=-\frac{1}{t} * log(1-\frac{cf_{prod} * (\frac{R_{ip, g}}{sf_{ip}} - \frac{R_{neg_ip, g}}{sf_{neg_ip}})}{\frac{R_{total, g}}{sf_{total}}})$$
+
+

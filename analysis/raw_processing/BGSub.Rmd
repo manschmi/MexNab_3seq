@@ -222,6 +222,8 @@ for f in *BGsub.bedgraph
 
 
 #### santiy check BGsub = raw - BG
+
+get background
 ```{r}
 (BG_stats_10min <- filter(stats_10min, rapa == 'neg', fraction == 'ip') %>%
   dplyr::rename(BG_raw_signal=sum_raw_signal) %>%

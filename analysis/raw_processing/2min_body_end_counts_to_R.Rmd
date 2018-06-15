@@ -1,8 +1,16 @@
 ---
 title: "Count body and end signal for the various samples and tracks"
 author: "Manfred Schmid"
-output: html_document
+output: 
+  pdf_document: 
+    toc: true 
+    toc_depth: 3
+    fig_caption: true
 ---
+
+
+## Setup
+
 `r format(Sys.time(), "%d %B, %Y")`
 
 ```{r setup}
@@ -18,7 +26,7 @@ suppressWarnings(library('broom'))
 ```
 
 
-# Load 2min counts into R
+## LOAD 2min counts into R
 
 ```{r}
 read_bedgraph_sums <- function(path, file_list, sfx) {
@@ -76,11 +84,11 @@ file_list
 
 
 ```{r}
-save(both_df, file='data/norm_2min_body_end_signals.RData')
+save(both_df, file='../../data/norm_2min_body_end_signals.RData')
 ```
 
 
-## Sanity check BGsub and pA minus method
+## SANITY CHECK BGsub and pA minus method
 
 simply checks that 
 1. norm. counts for $BGsub = normIP  -  normnegativeIP$  
@@ -135,8 +143,64 @@ BGsub_comparison %>%
 --> OK
 
 
+#### pAminus
 
-## Normalize reads to region length and correct for genomic A masked positions
+```{r}
+pAplus <- filter(both_df, pA == 'pA+',
+                 grepl('_ip_.*BGsub$', condition) | 
+                   grepl('_input_', condition)) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::select(-Pap, -pA, -rep) %>%
+  dplyr::rename(pAplus = sum)
+
+pAplusandminus <- filter(both_df, pA == 'pA+ + pA-',
+                 grepl('_ip_.*BGsub$', condition) | 
+                   grepl('_input_', condition)) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::select(-Pap, -pA) %>%
+  dplyr::rename(pAplusandminus = sum)
+
+pAminus <- filter(both_df, pA == 'pA-',
+                 grepl('_ip_.*BGsub$', condition) | 
+                   grepl('_input_', condition)) %>%
+  separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_', extra='drop') %>%
+  dplyr::select(-Pap, -pA) %>%
+  dplyr::rename(pAminus = sum)
+
+```
+
+
+```{r}
+IP_pAminus_redone <- left_join(pAplus, pAplusandminus) %>%
+  mutate(pAminus_redone = pAplusandminus - pAplus)
+```
+
+```{r}
+(pA_comparison <- left_join(IP_pAminus_redone, pAminus) %>%
+   mutate(relative_error = (pAminus-pAminus_redone)/pAminus_redone))
+```
+
+```{r}
+pA_comparison %>%
+  filter(is.finite(pAminus_redone), is.finite(pAminus)) %>%
+  group_by(part, strain, fraction, rapa, rep) %>%
+  #summarize(cnt=n()) %>% kable
+  do(tidy(cor.test(.$pAminus_redone, .$pAminus))) %>%
+  kable
+```
+
+```{r}
+pA_comparison %>%
+  filter(is.finite(pAminus_redone), is.finite(pAminus)) %>%
+  group_by(part, strain, fraction, rapa, rep) %>%
+  do(tidy(summary(.$relative_error))) %>% 
+  kable
+```
+
+--> perfectly correlated and same values
+--> OK
+
+
 
 #### work only with BGsub IPs
 
@@ -155,6 +219,86 @@ both_df %<>%
          type = ifelse(grepl('^XUT', type), 'XUT', type))
 ```
 
+
+## TOTAL SIGNAL PER ANNOTATION TYPE
+
+#### sum over body and end
+```{r}
+(total_sum <- both_df %>%
+  dplyr::select(-chr, -start, -end) %>%
+  spread(part, sum) %>%
+  mutate(sum = body + end) %>%
+  dplyr::select(-body, -end))
+```
+
+#### add SNR type and factor types and pA
+```{r}
+total_sum %<>%
+  mutate(type = ifelse(grepl('^snR', name), 'SNR', type),
+         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'SNR', 'other', 'XUT')),
+         pA = factor(pA, levels=c('pA+', 'pA-', 'pA+ + pA-', 'pA-X')))
+```
+
+
+#### set negatives to 0
+```{r}
+total_sum %<>%
+  mutate(sum = ifelse(sum < 0, 0, sum))
+```
+
+
+#### plot sums
+
+```{r barplot sums per anno}
+total_sum %>%
+  ggplot(., aes(x=type, y=sum, fill=type)) +
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+```{r barplot sums per anno clean rapa 0 Figure}
+total_sum %>%
+  filter(rapa == 0, 
+         type != 'other', type != 'XUT', 
+         pA == 'pA+' | pA == 'pA-') %>%
+  ggplot(., aes(x=type, y=sum, fill=type)) +
+  geom_bar(stat='identity') +
+  facet_grid(pA+fraction~strain+rapa+rep) +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+#### mean over replicates and strains
+
+```{r}
+total_avg <- total_sum %>%
+  group_by(pA, fraction, rapa, id, type) %>%
+  summarize(avg = mean(sum)) %>%
+  group_by(pA, fraction, rapa, type) %>%
+  summarize(total = sum(na.omit(avg)))
+```
+
+```{r barplot averages per anno clean rapa 0 Figure}
+total_avg %>%
+  ungroup %>%
+  filter(rapa == 0, 
+         type != 'other', type != 'XUT', 
+         pA == 'pA+' | pA == 'pA-') %>%
+  ggplot(., aes(x=type, y=total, fill=type)) +
+  geom_bar(stat='identity') +
+  facet_grid(fraction~pA, scales='free') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw()
+```
+
+
+## NORMALIZE TO LENGTH
+
+Normalize reads to region length and correct for genomic A masked positions..
 
 
 ### cleaned region lengths and A-masked positions
@@ -244,7 +388,7 @@ Original plain annotations:
 #### save the normalized scaled signals
 
 ```{r}
-save(both_df, file='data/norm_2min_body_end_scaled_and_BGsub.RData')
+save(both_df, file='../../data/norm_2min_body_end_scaled_and_BGsub.RData')
 ```
 
 
@@ -315,6 +459,96 @@ filter(both_df,
   kable
 ```
 
+
+
+## AVERAGE VALUES
+
+
+#### select only rapa 0 and pAplus or pAminus
+
+```{r}
+both_df %<>%
+  filter(rapa == 0,
+         pA == 'pA+' | pA == 'pA-')
+```
+
+
+## DR from ip relative input ratio
+
+#### Step 1: average over replicates
+
+```{r}
+(avg_signal <- both_df %>%
+  group_by(part, pA, strain, fraction, rapa, id, type, name) %>%
+  summarize(mean_C = mean(scaled_reads)))
+```
+
+
+#### compare Mex vs Nab
+
+```{r scatter plots Mex vs Nab average over replicates}
+avg_signal %>%
+  spread(strain, mean_C) %>%
+  ggplot(., aes(x=Mex67AA, y=Nab2AA)) +
+  geom_point() +
+  scale_x_log10() + scale_y_log10() +
+  facet_grid(part+pA~fraction+rapa)
+```
+
+overall correlated but there are differences especially in the IP samples...
+
+
+#### Step 2: average strains
+```{r}
+(avg_signal  %<>%
+  group_by(part, pA, fraction, rapa, id, type, name) %>%
+  summarize(mean_C = mean(mean_C)))
+```
+
+#### save the average signals
+
+```{r}
+save(avg_signal, file='../../data/norm_2min_body_end_scaled_and_BGsub_avg_signals.RData')
+```
+
+
+
+#### plot average signal per type and sample
+
+```{r violin plot avg signals per type part fraction and pA type}
+avg_signal %>%
+  ungroup %>%
+  mutate(part = factor(part, levels=c('body', 'end')),
+         pA = factor(pA, levels=c('pA+', 'pA-')),
+         fraction = factor(fraction, levels=c('input', 'ip')),
+         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs'))) %>%
+  filter(!is.na(type)) %>%
+  ggplot(., aes(x=type, y=mean_C, fill=type)) +
+  geom_violin() +
+  geom_boxplot(width=.1, outlier.shape=NA, fill='lightgray') +
+  facet_grid(part~pA+fraction+rapa) +
+  scale_y_log10() +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw()
+```
+
+```{r violin plot avg signals per type part fraction and pA type rapa 0 pAplus and pAminus}
+avg_signal %>%
+  ungroup %>%
+  mutate(part = factor(part, levels=c('body', 'end')),
+         pA = factor(pA, levels=c('pA+', 'pA-')),
+         fraction = factor(fraction, levels=c('input', 'ip')),
+         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs'))) %>%
+  filter(!is.na(type), rapa == 0,
+         pA == 'pA+' | pA == 'pA-') %>%
+  ggplot(., aes(x=type, y=mean_C, fill=type)) +
+  geom_violin() +
+  geom_boxplot(width=.1, outlier.shape=NA, fill='lightgray') +
+  facet_grid(part~pA+fraction+rapa) +
+  scale_y_log10() +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw()
+```
 
 
 ```{r}

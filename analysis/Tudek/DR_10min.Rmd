@@ -1,0 +1,388 @@
+---
+title: 'Estimation of Decay rates 10 min pA+ data'
+author: "Manfred Schmid"
+output: pdf_document
+---
+
+`r format(Sys.time(), "%d %B, %Y")`
+
+```{r setup, echo=TRUE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      fig.path=paste0('Figures_DR/'), 
+                      dev='pdf', 
+                      echo=TRUE, warning=FALSE, message=FALSE, 
+                      error=TRUE)
+```
+
+
+
+```{r load packages, echo=T, warning=F, message=F}
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(magrittr))
+suppressWarnings(library(DESeq2))
+```
+
+
+## Loading triplicate raw data
+
+#### 10min ip and input Mex and Nab depletion raw values from DESeq2 object
+
+```{r}
+load('../../data/DESeq2_dds_10min_Sp_sf.RData', verbose=TRUE)
+```
+
+metadata is in slot *colData()*
+```{r}
+(coldata <- colData(dds) %>%
+  data.frame %>%
+  rownames_to_column(var='lib'))
+```
+
+
+raw counts in *counts()*
+```{r}
+(dds_cnts <- counts(dds) %>% 
+  data.frame %>%
+  rownames_to_column(var='anno') %>%
+  tbl_df %>%
+  gather(lib, cnt, -anno))
+```
+
+
+#### normalize using spike ins via Sp size factors
+
+from DR_strategy Step 1: $ C = R/sf $
+
+apply this to the data
+```{r}
+(dds_norm_cnts <- left_join(dds_cnts, coldata) %>%
+  mutate(C = cnt/sizeFactor,
+         rep = ifelse(is.na(rep), '0', rep)) %>%
+  tidyr::separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
+  mutate(name = ifelse(id == 'XUT', type, name),
+         type = ifelse(id == 'XUT', id, type),
+         id = ifelse(type == 'XUT', name, id)))
+```
+
+
+
+#### briefly compare samples
+
+raw value distribution in replicates
+```{r densities raw counts per sample}
+ggplot(dds_norm_cnts, aes(x=log10(cnt), color=rapa, linetype=rep)) +
+  geom_density() +
+  facet_grid(strain~fraction)
+```
+
+
+spike-in normalized values
+```{r densities Sp_norm counts per sample}
+ggplot(dds_norm_cnts, aes(x=log10(C), color=rapa, linetype=rep)) +
+  geom_density() +
+  facet_grid(strain~fraction)
+```
+
+
+
+#### mean and variance for each gene in each condition
+
+For all conditions (except negative IP, see below) we have triplicates. For further calculations we average those by computing mean and variance over triplicates.
+
+Get raw variance from normalized data for each group within each comparison
+```{r}
+(per_cond <- dds_norm_cnts %>%
+  group_by(strain, fraction, rapa, condition, id) %>%
+  summarize(mean_C = mean(C),
+            var_C = var(C)))
+```
+
+
+#### mean vs variance plot all conditions in one
+```{r raw mean vs variance plot}
+ggplot(per_cond, aes(x=mean_C, y=var_C)) +
+  geom_point(size=.1) +
+  scale_x_log10() + scale_y_log10() +
+  geom_abline(slope=1, color='orange')
+```
+
+
+#### mean vs variance plot per condition
+```{r raw mean vs variance plot per condition}
+ggplot(per_cond, aes(x=mean_C, y=var_C)) +
+  geom_point(size=.1) +
+  scale_x_log10() + scale_y_log10() +
+  geom_abline(slope=1, color='orange') +
+  facet_grid(strain~fraction+rapa)
+```
+
+
+
+--> so its clearly not Poisson, hence assume negative binomial.
+
+--> DESEq2 has built-in estimation of dispersion using the global fit of mean vs variance relationship.
+
+
+
+## DESeq2 dispersion estimates
+
+According to DESeq2 logic the variance as estimated from triplicates is highly imprecise but this can be rescued to some extend by sharing information across genes, ie assuming expression-dependent var~mean dependency.
+
+DESeq2 models dispersion parameter $\alpha$ for a negative binomial test using:
+
+$$\mathrm{var} = \mu + \alpha \mu^2$$
+
+
+We can get the dispersion estimates $\alpha$ from the DESeq2 object:  
+```{r}
+head(dispersions(dds))
+```
+
+Dispersions into a dataframe for fusion with mean count data
+
+```{r}
+(disps <- data.frame(disp = dispersions(dds), 
+                     id = rownames(dds) %>%
+                            sub('^XUT:', '', .) %>%
+                            sub(':.*', '', .)) %>% tbl_df)
+```
+
+
+#### add DESeq2 dispersion into df
+
+```{r}
+per_cond %<>% left_join(., disps)
+```
+
+
+and now add the dispersion estimate-derived variance
+
+```{r}
+per_cond %<>% mutate(dispvar_C = mean_C + disp*(mean_C^2))
+```
+
+
+compare dispersion-derived variance vs actual variance
+```{r variance vs dispersionvariance}
+ggplot(per_cond, aes(x=var_C, y=dispvar_C)) +
+  geom_point() +
+  facet_grid(strain~fraction+rapa) +
+  scale_x_log10() + scale_y_log10() +
+  geom_abline(slope=1, color='orange')
+```
+
+
+OK, pretty well correlated but as expected some differences, especially for low variances
+
+
+#### save mean, var and dispersion
+
+```{r}
+save(per_cond, file='../../data/10min_mean_var_dispersion.RData')
+```
+
+
+
+## DR rate estimation
+
+
+#### load mean, variance and dispersions
+
+```{r}
+load('../../data/10min_mean_var_dispersion.RData', verbose=TRUE)
+
+per_cond
+```
+
+
+#### Step 1: reshape the data
+
+Computing the DR is tricky in full tidy format imho, so we split-combine the df to have input, ip and negative_ip with their dispersions in columns. 
+
+note for the negative IP there is only 1 replicate, so variance is 0, except *dispvar* which estimates from global mean to variance trend. 
+
+Get neg ip samples:  
+```{r}
+(C_neg <- per_cond %>%
+  ungroup %>%
+  filter(rapa == 'neg', fraction == 'ip') %>%
+  dplyr::select(strain, id, mean_C, dispvar_C) %>%
+  dplyr::rename(C_neg_ip = mean_C,
+                dispvar_C_neg_ip = dispvar_C))
+```
+
+
+Get ip samples:  
+```{r}
+(C_ip <- per_cond %>%
+  ungroup %>%
+  filter(fraction == 'ip', rapa != 'neg') %>%
+  dplyr::select(strain, rapa, id, mean_C, disp, dispvar_C) %>%
+  dplyr::rename(C_ip = mean_C,
+                disp_ip = disp,
+                dispvar_C_ip = dispvar_C))
+```
+
+Get input samples:  
+```{r}
+(C_in <- per_cond %>%
+  ungroup %>%
+  filter(fraction == 'in', rapa != 'neg') %>%
+  dplyr::select(strain, rapa, id, mean_C, disp, dispvar_C) %>%
+  dplyr::rename(C_in = mean_C,
+                disp_in = disp,
+                dispvar_C_in = dispvar_C))
+```
+
+
+Join them side-by-side:  
+```{r}
+(wide <- left_join(C_in, C_ip) %>% 
+  left_join(., C_neg))
+```
+
+
+
+## Step 2: Estimating a decay rate
+
+In the dataframe above the column *mean_C* refers to $C$ and the *dispvar_C* is the **moderated** variance of the mean.
+
+We first need clean the *ip* since it contains **contamination** that is estimated in a negative control sample.
+
+$$ C_{prod} = C_{ip} - C_{neg} $$
+
+```{r}
+(DR <- wide %>%
+  mutate(C_ip_BGsub = ifelse(C_ip - C_neg_ip > 0, 
+                              C_ip - C_neg_ip, 
+                              0),
+         ip_in_ratio = C_ip_BGsub/C_in,
+         DR_raw = -log(1-ip_in_ratio)/10))
+```
+
+
+So now we can calculate the decay rate ... however there is still a major issue that the $sf$ from labelled and total RNA are not directly comparable. But estimation of the decay rate requires this. 
+
+For a first analysis we assume they are directly comparable.
+
+```{r}
+hist(DR$ip_in_ratio, breaks=200)
+```
+
+But we observe that $ip/total$ ratio is often $>1$, so the normalized IP values are often higher than input, and this is true even after background subtraction. This is theoretically possible and hence the normalized IP values must therefore be **overscaled**. To solve this we will apply a correction factor  $cf_{prod}$ to correct scaling of the $C_{ip}$.
+
+
+
+
+#### Rescaling ip relative input
+
+A simple assumption could be that with 10min labelling the most unstable genes are close to fully labelled. 
+
+First get an impression of how the ratio is based by ip levels:
+```{r}
+DR %>%
+  ggplot(., aes(x=C_ip_BGsub, y=ip_in_ratio)) +
+  geom_point(size=.3, alpha=.2) +
+  scale_x_log10() + scale_y_log10() +
+  facet_grid(strain~rapa)
+```
+
+Seems like even genes with high IP levels can be very well labelled.
+From this plot we simply use genes with C_ip_BGsub > 100 and rapa=0 values and take the median of those genes.
+```{r}
+(cor_factor <- DR %>%
+  group_by(strain, rapa) %>%
+  filter(C_ip_BGsub > 100, 
+         ip_in_ratio > quantile(na.omit(ip_in_ratio), .95)) %>%
+  summarize(cf = 1/mean(ip_in_ratio)))
+```
+
+
+
+apply this for DR calculations:
+
+```{r}
+(DR %<>% left_join(., cor_factor) %>%
+  mutate(corrected_ip_in_ratio = cf * (C_ip_BGsub/C_in),
+         DR = -log(1-corrected_ip_in_ratio)/10))
+  
+```
+
+
+```{r DR raw vs rescaled using top 5percent}
+DR %>%
+  ggplot(., aes(x=DR_raw, y=DR)) +
+  geom_point(size=.3, alpha=.2) +
+  facet_grid(strain~rapa, scales='free')
+```
+
+clearly related but is not a linear relationshop. The scaled one reach a maximum defined by our anchor point the median of the top 5%...
+
+
+
+## Step 3: bootstrapping a confidence interval
+
+#### ci function
+```{r}
+DR_ci <- function( mean_in, mean_ip, mean_neg_ip, 
+                          disp_in, disp_ip, cf ) {
+  
+  input <- rnbinom(10000, size=1/disp_in, mu=mean_in)
+  ip <- rnbinom(10000, size=1/disp_ip, mu=mean_ip)
+  neg_ip <- rnbinom(10000, size=1/disp_ip, mu=mean_neg_ip)
+  
+  DRs <- -log(1-cf*(ip-neg_ip)/input)/10
+  
+  q <- quantile(na.omit(DRs), c(.05, .95))
+  data.frame('ci_low'= as.numeric(q[1]),
+       'ci_high' = as.numeric(q[2]))
+}
+```
+
+
+Test on single gene:  
+```{r}
+DR %>%
+  filter(grepl('^ST0005', id)) %>%
+  group_by(strain, rapa, id, DR) %>%
+  do(ci = DR_ci(.$C_in, .$C_ip, .$C_neg_ip, .$disp_in, .$disp_ip, .$cf)) %>%
+  mutate(ci_low=ci[[1]], ci_high=ci[[2]])
+```
+
+
+```{r}
+DR %>%
+  filter(grepl('^ST0005', id)) %>%
+  group_by(strain, rapa, id, DR) %>%
+  do(DR_ci(.$C_in, .$C_ip, .$C_neg_ip, .$disp_in, .$disp_ip, .$cf))
+```
+
+
+Test on a few genes:  
+```{r}
+DR %>%
+  filter(grepl('^ST000', id)) %>%
+  group_by(strain, rapa, id, DR) %>%
+  do(DR_ci(.$C_in, .$C_ip, .$C_neg_ip, .$disp_in, .$disp_ip, .$cf))
+```
+
+
+#### compute confint for all
+```{r}
+(DR_cis <- DR %>%
+  group_by(strain, rapa, id, DR) %>%
+  do(DR_ci(.$C_in, .$C_ip, .$C_neg_ip, .$disp_in, .$disp_ip, .$cf)))
+```
+
+
+#### save this:
+
+```{r}
+save(DR_cis, file='../../data/10min_DR_with_confint.RData')
+```
+
+
+
+```{r}
+sessionInfo()
+```

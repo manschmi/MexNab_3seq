@@ -1,7 +1,7 @@
 ---
 title: "Count body and end signal for the various samples and tracks"
 author: "Manfred Schmid"
-output: html_document
+output: pdf_document
 ---
 `r format(Sys.time(), "%d %B, %Y")`
 
@@ -689,6 +689,101 @@ rm minus_gene_endpm200.counts
 
 ## counting 2min data
 
+#### counting non-normalized data
+for count-based analysis count raw reads
+
+```{bash, eval=FALSE}
+## NORMALIZED to S.pombe track files
+cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/KevinRoyAfiltered_bedgraph
+
+#### annotation files
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_body_endsm200_cleaned_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ends_pm200_cleaned_minus.bed"
+
+#### counts for all raw read FILES
+for f in *_plus_KevinRoyAfiltered.bedgraph
+  do
+     echo "end reads counting"
+     echo $f
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+
+     fminus="${f/_plus/_minus}"
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+     echo "merging ends"
+     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_endpm200_count_sum_per_anno.txt}
+
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+     echo "merging body"
+     cat plus_gene_body.counts minus_gene_body.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_body_endsm200_cleaned_count_sum_per_anno.txt}
+     echo "done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+```
+
+
+
+#### body and end counting non-normalized XUTs
+
+```{bash, eval = FALSE}
+#### NORMALIZED to S.pombe input FILES
+
+body_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_plus.bed"
+body_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_body_endsm200_cleaned2x_minus.bed"
+ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_plus.bed"
+ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_minus.bed"
+
+
+#### counts for all raw read FILES
+for f in *_plus_KevinRoyAfiltered.bedgraph
+  do
+     echo "end reads counting"
+     echo $f
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_plus_bed $f 4 plus_gene_endpm200.counts
+
+     fminus="${f/_plus/_minus}"
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $ends_minus_bed $fminus 4 minus_gene_endpm200.counts
+
+     echo "merging ends"
+     cat plus_gene_endpm200.counts minus_gene_endpm200.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_XUTs_endpm200_count_sum_per_anno.txt}
+
+     echo "body reads counting"
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_plus_bed $f 4 plus_gene_body.counts
+
+     echo $fminus
+     bash /Users/schmidm/ms_tools/MS_Metagene_Tools/bed_count.sh $body_minus_bed $fminus 4 minus_gene_body.counts
+
+     echo "merging body"
+     cat plus_gene_body.counts minus_gene_body.counts > \
+     bedtools_counts/${f/_plus_KevinRoyAfiltered.bedgraph/_XUTs_body_endsm200_cleaned_count_sum_per_anno.txt}
+     echo "done"
+  done
+
+rm plus_gene_endpm200.counts
+rm minus_gene_endpm200.counts
+rm plus_gene_body.counts
+rm minus_gene_body.counts
+```
+
+
+
+#### counting normalized data
 in this case we are not doing any count-based analysis  
 -> count directly the normalized reads
 
@@ -801,7 +896,7 @@ rm minus_gene_body.counts
 ```
 
 
-#### body and end counting XUTs
+#### body and end counting normalized XUTs
 
 ```{bash, eval = FALSE}
 #### NORMALIZED to S.pombe input FILES
@@ -812,8 +907,10 @@ ends_plus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_
 ends_minus_bed="/Users/schmidm/Documents/genomewide_datasets/Expression/Morillon_XUTs/GSE69384_XUTs_ends_pm200_cleaned_minus.bed"
 
 
-# A-filtered bigwigs location
 cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph
+
+
+#### Inputs
 
 for f in *input*_plus_KevinRoyAfiltered.bedgraph
   do

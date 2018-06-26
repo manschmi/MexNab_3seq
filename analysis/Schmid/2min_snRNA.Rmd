@@ -1,7 +1,7 @@
 ---
 title: 'snRNA'
 author: "Manfred Schmid"
-output: html_document
+output: pdf_document
 ---
 
 `r format(Sys.time(), "%d %B, %Y")`
@@ -172,24 +172,10 @@ DR_snRNAs %>%
   theme_bw()
 ```
 
-```{r DR violin pAminus per position}
-DR_snRNAs %>%
-  filter(pA == 'pA-') %>%
-  ggplot(., aes(x=as.factor(rel_pos), y=DR)) +
-  geom_violin(alpha=.2) +
-  stat_summary(fun.y=median, geom="line", aes(group=1, color='red'), size=1)  + 
-  geom_jitter() +
-  scale_y_log10() +
-  facet_grid(.~pA) +
-  scale_fill_brewer(palette='Set1') +
-  scale_color_brewer(palette='Set1') +
-  theme_bw()
-```
 
-
-```{r DR boxplot and jitter pAminus per position with y scale as major Figure}
+```{r DR boxplot and jitter pA plus and pAminus per position with y scale as major Figure}
 DR_snRNAs %>%
-  filter(pA == 'pA-') %>%
+  filter(pA == 'pA-' | pA == 'pA+') %>%
   ggplot(., aes(x=as.factor(rel_pos), y=DR)) +
   geom_boxplot(width=.5, 
                outlier.shape = NA, 
@@ -198,7 +184,7 @@ DR_snRNAs %>%
   stat_summary(fun.y=median, geom="line", aes(group=1, color='red'), size=1)  + 
   geom_jitter(size=.1) +
   scale_y_log10() +
-  facet_grid(.~pA) +
+  facet_grid(pA~.) +
   coord_cartesian(ylim=c(.00001,10)) +
   scale_fill_brewer(palette='Set1') +
   scale_color_brewer(palette='Set1') +

@@ -1,7 +1,7 @@
 ---
 title: 'Junction Reads & Intron vs Exon'
 author: "Manfred Schmid"
-output: html_document
+output: pdf_document
 ---
 
 `r format(Sys.time(), "%d %B, %Y")`
@@ -28,7 +28,7 @@ suppressWarnings(library(broom))
 
 ```{bash, eval = FALSE}
 ### ORFT introns ###
-introns="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
+introns="~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
 
 
 cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
@@ -45,7 +45,7 @@ $introns "$plus_bw" "$minus_bw" \
 1000 2000 TES deeptools_out/ORFT/introns_0_1_3ssm1p2k "--binSize=10 --missingDataAsZero"
 
 #log2 counts
-python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/ORFT/introns_0_1_3ssm1p2k_joined.gz
+python ~/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/ORFT/introns_0_1_3ssm1p2k_joined.gz
 
 plotHeatmap -m deeptools_out/ORFT/introns_0_1_3ssm1p2k_joined_log2.gz \
       --sortUsing region_length --colorMap Blues --missingDataColor white \
@@ -266,7 +266,7 @@ called from remote via bash script using settings:
 #!/usr/bin/env bash
 
 bam="/Volumes/GenomeDK/faststorage/Lexogen2/STAR_map/42448_AATAGC_C9P6RANXX_5_20160808B_20160808_trimmed_cleanAligned.sortedByCoord.out.bam"
-bed="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
+bed="~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
 
 for bam in /Volumes/GenomeDK/faststorage/Lexogen2/STAR_map/*_trimmed_cleanAligned.sortedByCoord.out.bam
 do
@@ -319,7 +319,7 @@ echo "done"
 #### load 2' 4tU bam file name map
 
 ```{r}
-(bam_files <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/file_rename_map_Lexogen2.txt', stringsAsFactors = FALSE,
+(bam_files <- read.table('~/Documents/Results/Lexogen_RNAseq_2/file_rename_map_Lexogen2.txt', stringsAsFactors = FALSE,
            col.names = c('simple_name', 'bam_file')) %>%
   tbl_df)
 ```
@@ -327,7 +327,7 @@ echo "done"
 
 #### load counts 2min 4tU data
 ```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/splicing_stuff/junctions/'
+path <- '~/Documents/Results/Lexogen_RNAseq_2/splicing_stuff/junctions/'
 
 sfx <- '.outjunctions.countsv2'
 
@@ -400,7 +400,7 @@ Therefore:
 #### normalize to S.pombe
 
 ```{r}
-(sf <- read.table('data/Sp_2min_genes_sf.txt', col.names=c('condition', 'sf')) %>%
+(sf <- read.table('../../data/Sp_2min_genes_sf.txt', col.names=c('condition', 'sf')) %>%
   separate(condition, c('Pap', 'strain', 'fraction', 'rapa', 'rep'), sep='_') %>%
   tbl_df)
 ```
@@ -486,7 +486,7 @@ BGsub_norm_junctions_sum %>%
 
 #### load counts regular RNAseq
 ```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/splicing_stuff/junctions/'
+path <- '~/Documents/Results/Lexogen_RNAseq_2/splicing_stuff/junctions/'
 
 sfx <- '_adaptor_trimmedAligned.sortedByCoord.out_junctions.countsv2'
 
@@ -533,8 +533,8 @@ Sum up for each sample and junction type
 
 #### prepare intron and exon2 regions
 ```{bash, eval = FALSE}
-introns="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
-ORFs="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
+introns="~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
+ORFs="~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
 
 # introns are from SGD for sacCer3
 
@@ -552,9 +552,9 @@ awk '{
       }
     }
   }
-}' > /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed
+}' > ~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed
 
-exon2s="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed"
+exon2s="~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed"
 
 ## split strands 
 # introns
@@ -571,11 +571,11 @@ awk '$6 == "-"' $exon2s | cut -f 1-4 | awk '{if(name != $4){$2+=200;print $0}; n
 
 #### count signal in introns and exon2
 ```{bash, eval = FALSE}
-cd /Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw
+cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw
 
-introns="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
+introns="~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_introns.bed"
 
-exon2s="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed"
+exon2s="~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_ORFT_exon2s.bed"
 
 
 
@@ -585,22 +585,22 @@ for f in *plus*.bw
     
     outfname=$(echo $f | sed s/_plus_KevinRoyAfiltered//g | sed s/\.bw//g | sed s/_BGsub//g)
 
-    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${introns/.bed/_plus.bed} tmp_plus.tab
-    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${introns/.bed/_minus.bed} tmp_minus.tab
+    ~/ms_tools/bigWigAverageOverBed $f ${introns/.bed/_plus.bed} tmp_plus.tab
+    ~/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${introns/.bed/_minus.bed} tmp_minus.tab
     cat tmp_plus.tab tmp_minus.tab > bigWigAverageOverBed_counts/${outfname}"_introns.tab"
 
     rm tmp_plus.tab
     rm tmp_minus.tab
 
-    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_plus.bed} tmp_plus.tab
-    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_minus.bed} tmp_minus.tab
+    ~/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_plus.bed} tmp_plus.tab
+    ~/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_minus.bed} tmp_minus.tab
     cat tmp_plus.tab tmp_minus.tab > bigWigAverageOverBed_counts/${outfname}"_exon2s.tab"
 
     rm tmp_plus.tab
     rm tmp_minus.tab
 
-    /Users/schmidm/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_endm200_plus.bed} tmp_plus.tab
-    /Users/schmidm/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_endm200_minus.bed} tmp_minus.tab
+    ~/ms_tools/bigWigAverageOverBed $f ${exon2s/.bed/_endm200_plus.bed} tmp_plus.tab
+    ~/ms_tools/bigWigAverageOverBed ${f//plus/minus} ${exon2s/.bed/_endm200_minus.bed} tmp_minus.tab
     cat tmp_plus.tab tmp_minus.tab > bigWigAverageOverBed_counts/${outfname}"_exon2s_endm200.tab"
     
     rm tmp_plus.tab
@@ -613,7 +613,7 @@ for f in *plus*.bw
 #### load into R
 
 ```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bigWigAverageOverBed_counts/'
+path <- '~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/bigWigAverageOverBed_counts/'
 
 intron_files <- dir(path) %>% keep(grepl('_introns.tab$', .))
 simple_names <- sub('_introns.tab', '', intron_files) %>% sub('norm_', '', .)

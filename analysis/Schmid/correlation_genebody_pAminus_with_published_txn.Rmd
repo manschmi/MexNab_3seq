@@ -1,7 +1,9 @@
 ---
 title: "Correlation with published transcription studies"
 author: "Manfred Schmid"
-output: html_document
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
 ---
 `r format(Sys.time(), "%d %B, %Y")`
 
@@ -289,6 +291,14 @@ log2_mat_orfs <- log2_mat[orf_rows,]
 ```
 
 ```{r}
+nrow(log2_mat_orfs)
+```
+
+```{r}
+nrow(na.omit(log2_mat_orfs))
+```
+
+```{r}
 hc <- cor_dendro_hc(log2_mat_orfs, method='spearman', use='pairwise.complete.obs')
 ```
 
@@ -322,6 +332,14 @@ log2_mat_suts <- log2_mat[sut_rows,]
 ```
 
 ```{r}
+nrow(log2_mat_suts)
+```
+
+```{r}
+nrow(na.omit(log2_mat_suts))
+```
+
+```{r}
 hc <- cor_dendro_hc(log2_mat_suts, method='spearman', use='pairwise.complete.obs')
 ```
 
@@ -352,6 +370,14 @@ scatter_plots(log2_mat_suts, xcol_name = 'NETseq_mean',
 cut_rows <- (mat$type == 'CUTs')
 
 log2_mat_cuts <- log2_mat[cut_rows,]
+```
+
+```{r}
+nrow(log2_mat_cuts)
+```
+
+```{r}
+nrow(na.omit(log2_mat_cuts))
 ```
 
 ```{r}

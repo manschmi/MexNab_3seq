@@ -1,7 +1,9 @@
 ---
 title: 'Nucleosomes'
 author: "Manfred Schmid"
-output: html_document
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 `r format(Sys.time(), "%d %B, %Y")`
@@ -38,7 +40,7 @@ In the table nucleosomes marked with, + and - are the number of nucleosome accor
 
 ## convert to bed file
 
-cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/
+cd ~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/
 cat Pugh_measured_nucleosomes.txt | tr "\r" "\n" | cut -f 1-20 | head
 #Name    chrom   start   end     position        peakheight      nc      occ     fuzziness       Set1    rc1     occ1    Set2    rc2     occ2    Set3    rc3     occ3    Set4    rc4
 #N1:192  chr01   119     265             1,11    3       80,5    41      151     10      89                              192     109     72
@@ -66,7 +68,7 @@ cat Pugh_measured_nucleosomes.txt | tr "\r" "\n" | cut -f 2-6 | sed 1d | sed s/"
 
 cat V62_2009_02_18_V64_2011_02_03.over.chain | sed 's/_...._.._.. / /g' > V62_2009_02_18_V64_2011_02_03_plain.over.chain
 
-/Users/schmidm/Documents/genomewide_datasets/scripts/liftOver_and_conversionTools/liftOver Pugh_measured_nucleosomes_roman0.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain Pugh_measured_nucleosomes_roman0_sacCer3.bed conversion_failed.bed
+~/Documents/genomewide_datasets/scripts/liftOver_and_conversionTools/liftOver Pugh_measured_nucleosomes_roman0.bed V62_2009_02_18_V64_2011_02_03_plain.over.chain Pugh_measured_nucleosomes_roman0_sacCer3.bed conversion_failed.bed
 
 cat conversion_failed.bed
 ##Partially deleted in new
@@ -119,7 +121,7 @@ python ~/ms_tools/convert_chr_names2.py Pugh_measured_nucleosomes_roman0_sacCer3
 
 #### load the nucleosomes
 ```{r}
-(nucs <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_sacCer3.bed',
+(nucs <- read_tsv('~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_sacCer3.bed',
                   col_names = c('chr', 'start', 'end', 'position')))
 ```
 
@@ -142,7 +144,7 @@ Here is how this is achieved, includes also cleanup of the position formatting a
 
 To find out which strand the annotation covering the nucleosome is from we use an annotation file (this would be trivial for Y... gene names, but there is also SUTs,...).  
 ```{r}
-(anno <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
+(anno <- read_tsv('~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':'))
 ```
 
@@ -168,7 +170,7 @@ sum(is.na(uniquely_assigned_nucs$strand))
 filter(uniquely_assigned_nucs, !is.na(strand)) %>%
   mutate(nuc = paste(nuc, name, sep=':'),
          name = 0) %>%
-  write.table(., file='/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_sacCer3_unique_with_strand.bed', col.names = FALSE, row.names = FALSE, quote=FALSE, sep='\t')
+  write.table(., file='~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_sacCer3_unique_with_strand.bed', col.names = FALSE, row.names = FALSE, quote=FALSE, sep='\t')
 ```
 
 
@@ -178,7 +180,7 @@ filter(uniquely_assigned_nucs, !is.na(strand)) %>%
 cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
 mkdir deeptools_out/nucleosomes
 
-bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_sacCer3_unique_with_strand.bed"
+bed="~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_sacCer3_unique_with_strand.bed"
 
 
 awk '$4 ~ /\+1/' $bed | wc -l
@@ -189,7 +191,7 @@ awk '$4 ~ /\-1/' $bed | wc -l
 awk '$4 ~ /\+1:/' $bed > ${bed/_measured_nucleosomes/_measured_plus1_nucleosomes}
 
 ### +1 nucleosomes vs both strands ###
-plus1_bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
+plus1_bed="~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
 
 plus_bw="*_Mex67*_0_1*plus*.bw"
 minus_bw="*_Mex67*_0_1*minus*.bw"
@@ -201,7 +203,7 @@ $plus1_bed "$plus_bw" "$minus_bw" \
 1000 1000 TSS deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000 "--binSize=10 --missingDataAsZero"
 
 #log2
-python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000_joined.gz
+python ~/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000_joined.gz
 
 plotHeatmap -m deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000_log2.gz \
       --sortUsing region_length --colorMap Blues --missingDataColor white --zMax -1 \
@@ -227,7 +229,7 @@ $plus1_bed "$plus_bw" "$minus_bw" \
 1000 1000 TSS ../deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000 "--binSize=10 --missingDataAsZero"
 
 #log2
-python /Users/schmidm/ms_tools/MS_Metagene_Tools/log2_matrix.py ../deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined.gz
+python ~/ms_tools/MS_Metagene_Tools/log2_matrix.py ../deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined.gz
 
 plotProfile -m ../deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined_log2.gz \
 -out ../deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined_log2_profile.pdf \
@@ -261,7 +263,7 @@ nucleosome_rel_nuc_theme <- list(scale_x_continuous(minor_breaks=NULL, breaks=c(
 #### load to R
 
 ```{r}
-(nuc1 <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000_joined.gz'))
+(nuc1 <- RMetaTools::load_deeptoolsmatrix('~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/nucleosomes/Mex_0_1_plus1nuc_startpm1000_joined.gz'))
 
 nuc1 %<>%
   mutate(sample_name = sub('norm_', '', sample_name) %>%
@@ -276,7 +278,7 @@ nuc1 %<>%
 
 UPS: masked analysis not part of paper draft !
 ```{r}
-(nuc1_masked <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined.gz'))
+(nuc1_masked <- RMetaTools::load_deeptoolsmatrix('~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/nucleosomes/masked_Mex_0_1_plus1nuc_startpm1000_joined.gz'))
 
 
 nuc1_masked %<>%
@@ -336,11 +338,22 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+n in this plot:
+```{r}
+nuc1 %>%
+  group_by(rel_pos, pA, strain,fraction,rapa,rep) %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  filter(is.finite(log2_value), id %in% long_names, grepl('^Y', id)) %>%
+  summarise(cnt = n()) %>%
+  ungroup %>%
+  distinct(cnt)
+```
+
 
 #### divergent mRNAs only
 
 ```{r}
-(div_orfs <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
+(div_orfs <- read_tsv('~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_divergent_ORFTs_pairs_leq500bp.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':'))
 ```
 
@@ -360,7 +373,7 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
 #### tandem mRNAs only
 
 ```{r}
-(tandem_orfs <- read_tsv('/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
+(tandem_orfs <- read_tsv('~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_tandem_ORFTs_pairs_leq500bp.bed', col_names = c('chr', 'start', 'end', 'anno', 'score', 'strand')) %>%
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':'))
 ```
 
@@ -383,7 +396,7 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
 ### CRAC
 
 ```{bash, eval = FALSE}
-cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/
+cd ~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/
 
 plus_bw="bw/*_plus.bw"
 minus_bw="bw/*_minus.bw"
@@ -391,7 +404,7 @@ minus_bw="bw/*_minus.bw"
 sample_names=$(echo $plus_bw | sed s/_nabFT_plus.bw//g | sed s/GSM1706520_//g | sed s/GSM1706521_//g | sed s/bw\\///g)
 
 
-plus1_bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
+plus1_bed="~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
 
 bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
 $plus1_bed "$plus_bw" "$minus_bw" \
@@ -401,7 +414,7 @@ $plus1_bed "$plus_bw" "$minus_bw" \
 #### load to R
 
 ```{r}
-(crac <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/deeptools_out/CRAC_plus1nuc_startpm1000_joined.gz') %>%
+(crac <- RMetaTools::load_deeptoolsmatrix('~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Tollervey_RNAP_CRAC/deeptools_out/CRAC_plus1nuc_startpm1000_joined.gz') %>%
    mutate(log2_value = log2(value)))
 ```
 
@@ -416,6 +429,7 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
 ```
 
 
+#### long ORFs
 ```{r CRAC rel plus1 nucleosome long ORFs}
 crac %>%
   group_by(rel_pos, sample_name) %>%
@@ -427,6 +441,18 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+n with positive values for this:
+```{r}
+crac %>%
+  group_by(rel_pos, sample_name) %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  filter(is.finite(log2_value), id %in% long_names, grepl('^Y', id)) %>%
+  summarize(cnt=n()) %>%
+  ungroup %$%
+  table(cnt)
+```
+
+#### SUTs
 ```{r CRAC rel plus1 nucleosome long SUTs}
 crac %>%
   group_by(rel_pos, sample_name) %>%
@@ -438,6 +464,8 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+
+#### CUTs
 ```{r CRAC rel plus1 nucleosome CUTs}
 crac %>%
   group_by(rel_pos, sample_name) %>%
@@ -449,10 +477,12 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+
+
 ### NETseq
 
 ```{bash, eval = FALSE}
-cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq
+cd ~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq
 
 plus_bw="bw/GSM617027_WT_NC_plus_sacCer3.bw bw/GSM617030_DST1D_plus_sacCer3.bw"
 minus_bw=${plus_bw//plus/minus}
@@ -460,7 +490,7 @@ minus_bw=${plus_bw//plus/minus}
 sample_names=$(echo $plus_bw | sed s/_plus_sacCer3.bw//g | sed s/bw\\///g)
 
 
-plus1_bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
+plus1_bed="~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
 
 bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
 $plus1_bed "$plus_bw" "$minus_bw" \
@@ -470,7 +500,7 @@ $plus1_bed "$plus_bw" "$minus_bw" \
 #### load to R
 
 ```{r}
-(netseq <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/deeptools_out/NETseq_plus1nuc_startpm1000_joined.gz') %>%
+(netseq <- RMetaTools::load_deeptoolsmatrix('~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Churchman_NETseq/deeptools_out/NETseq_plus1nuc_startpm1000_joined.gz') %>%
    mutate(log2_value = log2(value)))
 ```
 
@@ -496,20 +526,31 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+n for this:
+```{r}
+netseq %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  filter(id %in% long_names, grepl('^Y', id)) %>%
+  group_by(rel_pos, sample_name) %>%
+  filter(is.finite(log2_value)) %>%
+  summarize(cnt=n()) %>%
+  ungroup %$%
+  table(cnt)
+```
 
 
 
 ### ChIPseq
 
 ```{bash, eval=FALSE}
-cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
+cd ~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq
 
 bw="GSM2551210_WT_A_140.bw"
 
 sample_names=$(echo $bw | sed s/_A_140.bw//g)
 
 ###+1 nucleosome
-plus1_bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
+plus1_bed="~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
 
 computeMatrix reference-point -R $plus1_bed -S $bw \
 -b 1000 -a 1000 --referencePoint TSS \
@@ -521,7 +562,7 @@ computeMatrix reference-point -R $plus1_bed -S $bw \
 #### load to R
 
 ```{r}
-(chipseq <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq/deeptools_out/ChIPseq_plus1nuc_startpm1000.gz') %>%
+(chipseq <- RMetaTools::load_deeptoolsmatrix('~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Henikoff_Rpb3FLAG_ChIPseq/deeptools_out/ChIPseq_plus1nuc_startpm1000.gz') %>%
    mutate(log2_value = log2(value)))
 ```
 
@@ -548,6 +589,17 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+n for this:
+```{r}
+chipseq %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  filter(id %in% long_names, grepl('^Y', id)) %>%
+  group_by(rel_pos, sample_name) %>%
+  filter(is.finite(log2_value)) %>%
+  summarize(cnt=n()) %>%
+  ungroup %$%
+  table(cnt)
+```
 
 ```{r ChIPseq rel plus1 nucleosome long SUTs}
 chipseq %>%
@@ -593,17 +645,17 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
 ### make a nucleosome track file
 ```{bash, eval = FALSE}
 awk '{OFS="\t"}{$4=1; print $0}' Pugh_measured_nucleosomes_sacCer3.bed > Pugh_measured_nucleosomes_binary_sacCer3.bedgraph
-/Users/schmidm/ms_tools/bedGraphToBigWig Pugh_measured_nucleosomes_binary_sacCer3.bedgraph /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes Pugh_measured_nucleosomes_sacCer3.bw
+~/ms_tools/bedGraphToBigWig Pugh_measured_nucleosomes_binary_sacCer3.bedgraph ~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes Pugh_measured_nucleosomes_sacCer3.bw
 
 ```
 
 ### metagene profile
 ```{bash, eval = FALSE}
-cd /Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes
+cd ~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes
 
 
 ### nucleosomes metagene around +1 nucleosome ###
-plus1_bed="/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
+plus1_bed="~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_plus1_nucleosomes_sacCer3_unique_with_strand.bed"
 
 
 computeMatrix reference-point \
@@ -617,7 +669,7 @@ plotHeatmap -m Pugh_measured_nucleosomes_rel_plus1nuc.gz --yMin 0 --yMax 1 -o Pu
 
 
 ```{r}
-(nuc_relplus1 <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_rel_plus1nuc.gz'))
+(nuc_relplus1 <- RMetaTools::load_deeptoolsmatrix('~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/Pugh_measured_nucleosomes_rel_plus1nuc.gz'))
 ```
 
 ```{r All nucs rel plus1 mRNA +1 nucleosome}
@@ -631,18 +683,40 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+```{r all nucs rel plus1 long mRNA +1 nucleosome}
+nuc_relplus1 %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  group_by(rel_pos, sample_name) %>%
+  filter(is.finite(value), id %in% long_names, grepl('^Y', id)) %>%
+  mutate(estimate = mean(value),
+         conf.low=estimate, conf.high=estimate) %>%
+ggplot(., aes(x=rel_pos, y=estimate)) +
+  facet_grid(sample_name~., scales='free') + theme_bw() +
+  nucleosome_rel_nuc_theme
+```
+
+n for this:
+```{r}
+nuc_relplus1 %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  group_by(rel_pos, sample_name) %>%
+  filter(is.finite(value), id %in% long_names, grepl('^Y', id)) %>%
+  summarize(cnt=n()) %>%
+  ungroup %>%
+  distinct(cnt)
+```
 
 ### TSS position relative to +1 nucleosome
 
 ```{bash, eval = FALSE}
-ORFs="/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
+ORFs="~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin_ORFTs.bed"
 
 awk '{OFS="\t"}{if($6=="+"){print $1"\t"$2"\t"$2+1"\t1"}}' $ORFs | sort -k1,1 -k2,2n > ${ORFs/.bed/_TSS_plus.bedgraph}
 awk '{OFS="\t"}{if($6=="-"){print $1"\t"$3-1"\t"$3"\t1"}}' $ORFs | sort -k1,1 -k2,2n > ${ORFs/.bed/_TSS_minus.bedgraph}
 
-/Users/schmidm/ms_tools/bedGraphToBigWig ${ORFs/.bed/_TSS_plus.bedgraph} /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes ${ORFs/.bed/_TSS_plus.bw}
+~/ms_tools/bedGraphToBigWig ${ORFs/.bed/_TSS_plus.bedgraph} ~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes ${ORFs/.bed/_TSS_plus.bw}
 
-/Users/schmidm/ms_tools/bedGraphToBigWig ${ORFs/.bed/_TSS_minus.bedgraph} /Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes ${ORFs/.bed/_TSS_minus.bw}
+~/ms_tools/bedGraphToBigWig ${ORFs/.bed/_TSS_minus.bedgraph} ~/Documents/genomewide_datasets/annotations/sacCer3/sacCer3_chrom.sizes ${ORFs/.bed/_TSS_minus.bw}
 
 bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
 $plus1_bed "${ORFs/.bed/_TSS_plus.bw}" "${ORFs/.bed/_TSS_minus.bw}" \
@@ -653,7 +727,7 @@ plotHeatmap -m ORF_TSSs_rel_plus1nuc_joined.gz -o ORF_TSSs_rel_plus1nuc_htmp.pdf
 
 
 ```{r}
-(tsss_relplus1 <- RMetaTools::load_deeptoolsmatrix('/Users/schmidm/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/ORF_TSSs_rel_plus1nuc_joined.gz'))
+(tsss_relplus1 <- RMetaTools::load_deeptoolsmatrix('~/Documents/genomewide_datasets/ChIP_CLiP_yeast/Pugh_nucleosomes/ORF_TSSs_rel_plus1nuc_joined.gz'))
 ```
 
 ```{r TSSs rel plus1 mRNA +1 nucleosome}
@@ -667,6 +741,28 @@ ggplot(., aes(x=rel_pos, y=estimate)) +
   nucleosome_rel_nuc_theme
 ```
 
+```{r TSSs rel plus1 long mRNA +1 nucleosome}
+tsss_relplus1 %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  group_by(rel_pos, sample_name) %>%
+  filter(is.finite(value), id %in% long_names, grepl('^Y', id)) %>%
+  mutate(estimate = mean(value),
+         conf.low=estimate, conf.high=estimate) %>%
+ggplot(., aes(x=rel_pos, y=estimate)) +
+  facet_grid(sample_name~., scales='free') + theme_bw() +
+  nucleosome_rel_nuc_theme
+```
+
+n for this:
+```{r}
+tsss_relplus1 %>%
+  separate(id, c('nuc', 'id'), sep=':') %>%
+  group_by(rel_pos, sample_name) %>%
+  filter(is.finite(value), id %in% long_names, grepl('^Y', id)) %>%
+  summarize(cnt=n()) %>%
+  ungroup %>%
+  distinct(cnt)
+```
 
 ```{r}
 sessionInfo()

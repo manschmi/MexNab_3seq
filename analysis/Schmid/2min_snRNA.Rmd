@@ -57,26 +57,60 @@ plotHeatmap -m deeptools_out/SNR/snRNA_0_1_TESpm1k_joined_log2.gz \
 ## single nucleotide metagene analysis
 
 ```{bash, eval = FALSE}
-sgdSNR="/Users/schmidm//Documents/genomewide_datasets/annotations/sacCer3/sgdSNRs_sacCer3.bed"
-
+### snRNA TES ###
+sgdSNR="~/Documents/genomewide_datasets/annotations/sacCer3/sgdSNRs_sacCer3.bed"
 cd ~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/
-
 ##rapa 0 rep 1 samples
-plus_bw="*_0_1*_plus*.bw"
+plus_bw="*_0_*_plus*.bw"
 minus_bw=${plus_bw/plus/minus}
-
 sample_names=$(echo $plus_bw | sed s/norm_//g | sed s/_BGsub//g | sed s/_plus_KevinRoyAfiltered.bw//g)
+
+
+ls $plus_bw 
+# norm_noPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bw
+# norm_noPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bw
+# norm_noPap_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bw
+# norm_noPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPap_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bw
+# norm_xPap_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPap_Mex67AA_ip_0_2_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPap_Mex67AA_ip_0_3_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPap_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bw
+# norm_xPap_Nab2AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPap_Nab2AA_ip_0_2_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPap_Nab2AA_ip_0_3_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPappAminus_Mex67AA_input_0_1_plus_KevinRoyAfiltered.bw
+# norm_xPappAminus_Mex67AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPappAminus_Mex67AA_ip_0_2_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPappAminus_Mex67AA_ip_0_3_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPappAminus_Nab2AA_input_0_1_plus_KevinRoyAfiltered.bw
+# norm_xPappAminus_Nab2AA_ip_0_1_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPappAminus_Nab2AA_ip_0_2_plus_KevinRoyAfiltered_BGsub.bw
+# norm_xPappAminus_Nab2AA_ip_0_3_plus_KevinRoyAfiltered_BGsub.bw
+
+
+echo $sample_names 
+#noPap_Mex67AA_input_0_1 noPap_Mex67AA_ip_0_1 noPap_Nab2AA_input_0_1 noPap_Nab2AA_ip_0_1 xPap_Mex67AA_input_0_1 xPap_Mex67AA_ip_0_1 xPap_Mex67AA_ip_0_2 xPap_Mex67AA_ip_0_3 xPap_Nab2AA_input_0_1 xPap_Nab2AA_ip_0_1 xPap_Nab2AA_ip_0_2 xPap_Nab2AA_ip_0_3 xPappAminus_Mex67AA_input_0_1 xPappAminus_Mex67AA_ip_0_1 xPappAminus_Mex67AA_ip_0_2 xPappAminus_Mex67AA_ip_0_3 xPappAminus_Nab2AA_input_0_1 xPappAminus_Nab2AA_ip_0_1 xPappAminus_Nab2AA_ip_0_2 xPappAminus_Nab2AA_ip_0_3
 
 ## matrix
 bash ~/ms_tools/MS_Metagene_Tools/computeMatrixStrandedX.sh reference-point \
 $sgdSNR "$plus_bw" "$minus_bw" \
-10 10 TES deeptools_out/SNR/snRNA_0_1_TESpm10bp_single_nucres "--binSize=1 --missingDataAsZero"
+10 10 TES deeptools_out/SNR/snRNA_0_all_TESpm10bp_single_nucres "--binSize=1 --missingDataAsZero"
+
+#log2 instead of counts
+python ~/ms_tools/MS_Metagene_Tools/log2_matrix.py deeptools_out/SNR/snRNA_0_all_TESpm10bp_single_nucres_joined.gz
+
+plotHeatmap -m deeptools_out/SNR/snRNA_0_all_TESpm10bp_single_nucres_joined_log2.gz \
+      --sortUsing sum --colorMap Blues --missingDataColor white \
+      --refPointLabel TES \
+      --samplesLabel $sample_names \
+      -out deeptools_out/SNR/snRNA_0_all_TESpm10bp_single_nucres_joined_log2_heatmap.pdf
 ```
 
 
 #### single nucl to R
 ```{r}
-snrna <- RMetaTools::load_deeptoolsmatrix('~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/SNR/snRNA_0_1_TESpm10bp_single_nucres_joined.gz')
+snrna <- RMetaTools::load_deeptoolsmatrix('~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bw/deeptools_out/SNR/snRNA_0_all_TESpm10bp_single_nucres_joined.gz')
 
 snrna
 ```
@@ -101,12 +135,22 @@ add pseudount for IPs and pAminus at or below background
 ```
 
 
+
+#### average replicate and strains
+```{r}
+(snrna_avg <- snrna %>%
+  group_by(id, name, rel_pos, pA, fraction, rapa) %>%
+  summarize(value = mean(value)))
+```
+
+
 #### metagene values
 ```{r}
-(snrna_meta <- snrna %>%
-  group_by(rel_pos, pA, strain, fraction, rapa, rep) %>%
+(snrna_meta <- snrna_avg %>%
+  group_by(rel_pos, pA, fraction, rapa) %>%
   do(tidy(summary(.$value))))
 ```
+
 
 
 #### plots
@@ -117,12 +161,21 @@ ggplot(., aes(x=rel_pos, y=mean)) +
   geom_line() +
   geom_line(aes(y=median), color='red') +
   scale_y_log10() +
-  facet_grid(strain~pA+fraction+rapa+rep, scales='free') +
+  facet_grid(.~pA+fraction+rapa, scales='free') +
   theme_bw()
 ```
 
+n for those:
+```{r}
+snrna_avg %>%
+  group_by(rel_pos, pA, fraction, rapa) %>%
+  filter(!is.na(value)) %>%
+  summarise(cnt = n()) %>%
+  spread(rel_pos, cnt)
+```
 
-```{r snRNA single nuc mean and median line and points}
+
+```{r snRNA single nuc mean and median line and points individual libraries}
 snrna %>%
   filter(rapa == '0') %>%
 ggplot(., aes(x=rel_pos, y=value)) + 
@@ -138,6 +191,7 @@ ggplot(., aes(x=rel_pos, y=value)) +
 
 ## Decay rates from those data
 
+same calculations as above but consider genes at background as 0 decay rate for median calculation later on
 ```{r}
 (DR_snRNAs <- snrna %>%
   filter(rapa == 0) %>%
@@ -146,10 +200,12 @@ ggplot(., aes(x=rel_pos, y=value)) +
   spread(fraction, mean_C) %>%
   mutate(ip_in_ratio = ip/input,
          DR = -log(1-ip_in_ratio)/2,
-         DR = ifelse(ip == pseudocount | input == pseudocount, NA, DR)))
+         DR = case_when((ip == pseudocount) & (input > pseudocount) ~ 0,
+                        input == pseudocount ~ as.numeric(NA),
+                        (ip > pseudocount) & (input > pseudocount) ~ DR)))
 ```
 
-```{r DR violins all positions summed}
+```{r DR violin with box all positions summed}
 DR_snRNAs %>%
   ggplot(., aes(x=pA, y=DR, fill=pA)) +
   geom_violin() +
@@ -159,17 +215,41 @@ DR_snRNAs %>%
                fill='lightgray') +
   scale_y_log10() +
   scale_fill_brewer(palette='Set1') +
-  theme_bw()
+  theme_bw() 
 ```
 
-```{r DR points by positions}
+```{r DR violin with box pAminus per positions summed}
 DR_snRNAs %>%
-  ggplot(., aes(x=rel_pos, y=DR, fill=pA)) +
-  geom_point() +
-  scale_y_log10() +
+  filter(pA == 'pA-') %>%
+  ggplot(., aes(x=as.factor(rel_pos), y=DR)) +
+  geom_violin(fill='purple') +
   facet_grid(.~pA) +
+  geom_boxplot(aes(x=as.factor(rel_pos), y=DR),
+               width=.1, 
+               outlier.shape = NA, 
+               outlier.color = NULL, 
+               fill='lightgray') +
+  scale_y_log10() +
   scale_fill_brewer(palette='Set1') +
-  theme_bw()
+  theme_bw() +
+  facet_grid(.~pA)
+```
+
+```{r DR violin with box pAplus per positions summed}
+DR_snRNAs %>%
+  filter(pA == 'pA+') %>%
+  ggplot(., aes(x=as.factor(rel_pos), y=DR)) +
+  geom_violin(fill='purple') +
+  facet_grid(.~pA) +
+  geom_boxplot(aes(x=as.factor(rel_pos), y=DR),
+               width=.1, 
+               outlier.shape = NA, 
+               outlier.color = NULL, 
+               fill='lightgray') +
+  scale_y_log10() +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw() +
+  facet_grid(.~pA)
 ```
 
 
@@ -197,7 +277,8 @@ most stable snRNAs
 ```{r}
 DR_snRNAs %>%
   filter(pA == 'pA-', rel_pos == 0) %>%
-  arrange(DR)
+  arrange(DR) %>%
+  kable
 ```
 
 DR per position medians

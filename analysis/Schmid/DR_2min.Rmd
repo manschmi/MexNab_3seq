@@ -122,6 +122,70 @@ DR_ip_rel_in %>%
   spread(pA, median_DR)
 ```
 
+#### add sn(o)RNA data
+
+```{r}
+load('../../data/2min_DR_snRNAs.RData', verbose=TRUE)
+
+DR_snRNAs
+```
+
+we consider only the exact end position
+```{r}
+DR_snRNAs %<>% 
+  ungroup %>%
+  filter(rel_pos == 0, pA == 'pA+' | pA == 'pA-') %>% 
+  mutate(part = 'end', type = 'snRNA') %>%
+  dplyr::select(-rel_pos)
+```
+
+```{r}
+DR_ip_rel_in_with_snRNA <- bind_rows(DR_snRNAs, DR_ip_rel_in) %>%
+  mutate(type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs', 'snRNA', 'other')),
+         pA = factor(pA, levels=c('pA+', 'pA-')))
+```
+
+
+```{r DR violins part and pA facets ends with snRNA pos 0 with jitter}
+DR_ip_rel_in_with_snRNA %>%
+  filter(type != 'other', part == 'end') %>%
+  ggplot(., aes(x=type, y=DR, fill=type)) +
+  geom_violin() +
+  geom_boxplot(width=.2, 
+               outlier.shape = NA, 
+               outlier.color = NULL, 
+               fill='lightgray') +
+  geom_jitter(size=.1, alpha=.1, color='lightgray') +
+  scale_y_log10() +
+  facet_grid(part~pA) +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw()
+```
+
+```{r DR violins part and pA facets ends with snRNA pos 0 wo jitter}
+DR_ip_rel_in_with_snRNA %>%
+  filter(type != 'other', part == 'end') %>%
+  ggplot(., aes(x=type, y=DR, fill=type)) +
+  geom_violin() +
+  geom_boxplot(width=.2, 
+               outlier.shape = NA, 
+               outlier.color = NULL, 
+               fill='lightgray') +
+  scale_y_log10() +
+  facet_grid(part~pA) +
+  scale_fill_brewer(palette='Set1') +
+  theme_bw()
+```
+
+#### n for the violins
+```{r}
+DR_ip_rel_in_with_snRNA %>%
+  filter(type != 'other', part == 'end', DR > 0) %>% #note DR>0 for others not shown on violin plot!!
+  group_by(type, part, pA) %>%
+  summarize(cnt = n())
+```
+
+
 ### Comparison with published estimates
 
 #### Load published decay rate datasets
@@ -276,6 +340,14 @@ DR_txn_rel_total %>%
   coord_cartesian(ylim=c(.0001,1000))
 ```
 
+n for those violins
+```{r}
+DR_txn_rel_total %>%
+  filter(type != 'other', DR_txn_rel_total > 0) %>% #note DR>0 for others not shown on violin plot!!
+  group_by(type) %>%
+  summarize(cnt = n())
+```
+
 
 ### Comparison with published estimates
 
@@ -301,6 +373,12 @@ DR_mat <- DR_txn_rel_total %>%
   na.omit
 
 head(DR_mat)
+```
+
+
+n genes considered:
+```{r}
+nrow(DR_mat)
 ```
 
 #### spearman correlation
@@ -391,6 +469,16 @@ DR_txn_rel_total %>%
   coord_cartesian(ylim=c(.0001,1000))
 ```
 
+n for those violins
+```{r}
+DR_txn_rel_total %>%
+  dplyr::select(id, type, DR_txnfromtotal_rel_total) %>%
+  filter(type != 'other', DR_txnfromtotal_rel_total > 0) %>% #note DR>0 for others not shown on violin plot!!
+  group_by(type) %>%
+  summarize(cnt = n())
+```
+
+
 
 ### Comparison with published estimates
 
@@ -410,6 +498,11 @@ DR_mat <- DR_txn_rel_total %>%
   na.omit
 
 head(DR_mat)
+```
+
+n for correlations
+```{r}
+nrow(DR_mat)
 ```
 
 #### spearman correlation
@@ -467,6 +560,7 @@ DR_mat <- DR_all %>%
 
 head(DR_mat)
 ```
+
 
 #### spearman correlation
 
@@ -557,6 +651,12 @@ cor.pvalues %>%
 ```{r}
 paper_cols <- c('DR_pAplus','Miller_DR','Sun_DR','Presnyak_total_DR','DR_txn_rel_total','DR_txnfromtotal_rel_total')
 ```
+
+n for correlations
+```{r}
+nrow(DR_mat)
+```
+
 
 ```{r spearman correlation hclust DR paper sel}
 spearman_dists <- DR_mat[,paper_cols] %>%

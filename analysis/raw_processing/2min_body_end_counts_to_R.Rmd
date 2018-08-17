@@ -42,7 +42,7 @@ read_bedgraph_sums <- function(path, file_list, sfx) {
 
 #### load and combine Sp-normalized end counts
 ```{r}
-path <- '/Users/schmidm/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
+path <- '~/Documents/Results/Lexogen_RNAseq_2/STAR_bw/norm_and_pA_filtered_bedgraph/bedtools_counts/'
 sfx <- '_endpm200.*count_sum_per_anno.txt$'
 
 file_list <- dir(path)[grep(sfx, dir(path))]
@@ -307,28 +307,28 @@ Note: for body regions stripped for overlapping ends, end regions are all 400bp.
 
 A-masked positions: nothing will ever be counted from those positions, so in practice these positions do not count to the length of each region -> subtract them:  
 ```{r}
-(effective_body_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
+(effective_body_len <- read.table('~/Documents/Results/Lexogen_RNAseq/anno/clean_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
    tbl_df %>%
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
    mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
 ```
 
 ```{r}
-(effective_body_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned2x_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
+(effective_body_len_XUTs <- read.table('~/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned2x_body_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'body_pA_masked')) %>%
    tbl_df %>%
    separate(anno, c('type', 'id'), sep=':') %>%
    mutate(pAfiltered_cleaned_body_len = end - start - body_pA_masked))
 ```
 
 ```{r}
-(effective_end_len <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
+(effective_end_len <- read.table('~/Documents/Results/Lexogen_RNAseq/anno/clean_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
    tbl_df %>%
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':') %>%
    mutate(pAfiltered_end_len = end - start - end_pA_masked))
 ```
 
 ```{r}
-(effective_end_len_XUTs <- read.table('/Users/schmidm/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
+(effective_end_len_XUTs <- read.table('~/Documents/Results/Lexogen_RNAseq/anno/XUTs_cleaned_ends_pAfilter.counts', col.names=c('chr', 'start', 'end', 'anno', 'end_pA_masked')) %>%
    tbl_df %>%
    separate(anno, c('type', 'id'), sep=':') %>%
    mutate(pAfiltered_end_len = end - start - end_pA_masked))
@@ -360,7 +360,7 @@ A-masked positions: nothing will ever be counted from those positions, so in pra
 
 Original plain annotations:  
 ```{r}
-(anno <- read.table("/Users/schmidm/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed", col.names = c('chr', 'start', 'end', 'anno', 'pad', 'strand')) %>%
+(anno <- read.table("~/Documents/genomewide_datasets/annotations/sacCer3/Steinmetz_sacCer3_latin.bed", col.names = c('chr', 'start', 'end', 'anno', 'pad', 'strand')) %>%
   tbl_df %>% 
    separate(anno, c('id', 'type', 'name', 'common_name'), sep=':')  %>%
    arrange(id))
@@ -515,23 +515,6 @@ save(avg_signal, file='../../data/norm_2min_body_end_scaled_and_BGsub_avg_signal
 
 #### plot average signal per type and sample
 
-```{r violin plot avg signals per type part fraction and pA type}
-avg_signal %>%
-  ungroup %>%
-  mutate(part = factor(part, levels=c('body', 'end')),
-         pA = factor(pA, levels=c('pA+', 'pA-')),
-         fraction = factor(fraction, levels=c('input', 'ip')),
-         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs'))) %>%
-  filter(!is.na(type)) %>%
-  ggplot(., aes(x=type, y=mean_C, fill=type)) +
-  geom_violin() +
-  geom_boxplot(width=.1, outlier.shape=NA, fill='lightgray') +
-  facet_grid(part~pA+fraction+rapa) +
-  scale_y_log10() +
-  scale_fill_brewer(palette='Set1') +
-  theme_bw()
-```
-
 ```{r violin plot avg signals per type part fraction and pA type rapa 0 pAplus and pAminus}
 avg_signal %>%
   ungroup %>%
@@ -548,6 +531,23 @@ avg_signal %>%
   scale_y_log10() +
   scale_fill_brewer(palette='Set1') +
   theme_bw()
+```
+
+n in the violins
+```{r}
+avg_signal %>%
+  ungroup %>%
+  mutate(part = factor(part, levels=c('body', 'end')),
+         pA = factor(pA, levels=c('pA+', 'pA-')),
+         fraction = factor(fraction, levels=c('input', 'ip')),
+         type = factor(type, levels=c('ORF-T', 'SUTs', 'CUTs'))) %>%
+  filter(!is.na(type), 
+         rapa == 0,
+         pA == 'pA+' | pA == 'pA-',
+         mean_C > 0) %>%
+  group_by(rapa, pA, part, fraction, type) %>%
+  summarize(cnt = n()) %>%
+  kable
 ```
 
 

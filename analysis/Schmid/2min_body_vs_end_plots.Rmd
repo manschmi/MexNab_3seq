@@ -1,7 +1,9 @@
 ---
 title: "Count body and end signal for the various samples and tracks"
 author: "Manfred Schmid"
-output: html_document
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
 ---
 `r format(Sys.time(), "%d %B, %Y")`
 
@@ -24,7 +26,7 @@ Using scaled S.pombe normalized and BGsub data from *body_end_counting.Rmd* and 
 
 these are BGsub and normalized to S.pombe.
 ```{r}
-load('data/norm_2min_body_end_scaled_and_BGsub.RData', verbose = TRUE)
+load('../../data/norm_2min_body_end_scaled_and_BGsub.RData', verbose = TRUE)
 
 both_df
 ```

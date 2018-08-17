@@ -181,8 +181,7 @@ No specific order:
     + violin plots signal in body and end pA+ and pA-
   
 + correlation_genebody_pAminus_with_published_txn.Rmd
-
-+ correlation_genebody_pAminus_with_published_txn_triplicates_separate.Rmd
+    + using averaged data
     + same as above but for individual replicates without averaging
     
 + heatmaps.Rmd 
